@@ -1,0 +1,12 @@
+# Node dependencies & compilations
+**/node_modules/
+**/dist/
+**/.next/
+
+# Local System Credentials & Secrets
+**/.env
+**/.env.local
+
+# OS Environment Noise
+*.log
+.DS_Store
