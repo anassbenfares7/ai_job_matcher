@@ -5,20 +5,18 @@ import { env } from '../config/env.js';
 const ai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
 
 /**
- * Service to parse raw CV text into a strict, validated schema using Gemini
+ * Service to parse CV metadata using Gemini multi-modal processing capabilities
  */
-export const parseResumeText = async (rawText: string) => {
+export const parseResumeText = async (resumePart: { inlineData: { data: string; mimeType: string } }) => {
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash', // Production-standard fast, cost-efficient model
-      contents: `Analyze the following raw CV text extracted from a tech professional's resume. 
-      Extract their core skills, educational background, and professional experience timeline.
-      
-      Raw CV Text:
-      ${rawText}`,
+      model: 'gemini-3.6-flash', // 🚀 Updated to the latest production standard
+      contents: [
+        resumePart,
+        `Analyze the attached resume document. Extract the candidate's full name, core skills, educational background, and professional experience timeline.`
+      ],
       config: {
         systemInstruction: "You are an expert technical recruiter analyzing tech profiles for the Moroccan job market. Extract structural data accurately. If a field cannot be found, leave it empty or map it logically.",
-        // Enforce rigid structural JSON output constraints at the model layer
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
@@ -66,7 +64,6 @@ export const parseResumeText = async (rawText: string) => {
       throw new Error("Gemini API returned an empty completion response.");
     }
 
-    // Since the SDK guarantees pure JSON formatting, we can parse safely without sanitization strings
     return JSON.parse(responseText);
 
   } catch (error) {
@@ -74,6 +71,7 @@ export const parseResumeText = async (rawText: string) => {
     throw new Error("Failed to process and analyze resume structure via AI pipeline.");
   }
 };
+
 
 /**
  * Service to generate high-fidelity mathematical vector embeddings
@@ -131,7 +129,7 @@ export const generateApplicationMaterials = async (
 
     // Call Gemini with structured markdown output instructions
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.6-flash', // 🚀 Updated to the latest production standard
       contents: `
         You are a premier executive recruiter specializing in the Moroccan tech hubs of Casablanca, Rabat, and Tangier. 
         Analyze the candidate's structured profile alongside the job opening metadata to produce high-value application assets.
