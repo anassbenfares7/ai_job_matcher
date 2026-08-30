@@ -1,31 +1,30 @@
 import axios from 'axios';
 import Cookies from 'js-cookie';
 
-// 1. Instantiate our isolated, structured API configuration tunnel
+// 1. Instantiate an isolated, structured API configuration pipeline
 export const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api',
-  // 🚀 INCREASE THIS BOUND: Raise to 30 seconds to allow comprehensive AI generation streams to finish
-  timeout: 30000, 
+  timeout: 30000, // Safe 30-second cap to give long-running AI processes room to stream
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// 2. Attach the Global Request Interceptor Guard
+// 2. Attach the Dynamic Global Request Interceptor Guard
 api.interceptors.request.use(
   (config) => {
-    // Look up our stateless application session token out of the secure cookie vault
+    // 🚀 DYNAMIC LOOKUP: Always fetch the live cookie payload directly inside the interception block execution pass
     const token = Cookies.get('ai_job_matcher_token');
 
-    // If a token exists, smoothly bind the official standard Bearer authorization protocol header
-    if (token && config.headers) {
+    // If a token is active in the browser, explicitly overwrite the Authorization bearer header block
+    if (token) {
+      config.headers = config.headers || {};
       config.headers.Authorization = `Bearer ${token}`;
     }
 
     return config;
   },
   (error) => {
-    // Gracefully route request intercept line errors directly down to global UI promise catchers
     return Promise.reject(error);
   }
 );
