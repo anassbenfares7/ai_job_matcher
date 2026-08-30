@@ -121,29 +121,66 @@ export default function DashboardPage() {
     }
   };
 
-  const handleGenerateMaterials = async (job: JobMatch) => {
-    setGeneratingId(job.id);
-    setSelectedJob(job);
+   const handleGenerateMaterials = async (job: JobMatch) => {
+    // 🚀 1. FORCE CLEAN SLATE RESET: Clear previous failures and data models immediately
+    setErrorMessage('');
     setCoverLetter('');
     setFeedback('');
+    
+    // Set active context identifiers instantly
+    setSelectedJob(job);
+    setGeneratingId(job.id);
 
     try {
-      const res = await api.post('/materials/generate', {
-        jobId: job.id,
-      });
-
-      setCoverLetter(res.data.data.coverLetter);
-      setFeedback(res.data.data.feedback);
-    } catch (err: any) {
-      console.error('❌ Generation pipeline failure:', err);
-
-      setErrorMessage(
-        'Failed to generate application materials. Please try again.'
-      );
-    } finally {
+      console.log(`⏳ [Materials Gateway] Querying material nodes for job: ${job.id}`);
+      
+      // 2. Fire the network data fetch operation request
+      const res = await api.post('/materials/generate', { jobId: job.id });
+      
+      // 3. Extract and map payload properties onto clean view hooks
+      if (res.data && res.data.data) {
+        setCoverLetter(res.data.data.coverLetter || 'No cover letter layout parsed.');
+        setFeedback(res.data.data.feedback || 'No optimization feedback parsed.');
+      }
+      
+      // Release generation locking indicator
       setGeneratingId(null);
+    } catch (err: any) {
+      // 4. Intercept explicitly timed-out or long-running AI requests
+      if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+        console.warn('⚠️ [Materials Engine] Direct API request timed out. Activating asynchronous database polling routine...');
+        
+        // Wait 2.5 seconds for the background database process to complete writing the cache row
+        setTimeout(async () => {
+          try {
+            console.log('🔄 [Polling Matrix] Executing cache recovery handshake for job:', job.id);
+            const retryRes = await api.post('/materials/generate', { jobId: job.id });
+            
+            if (retryRes.data && retryRes.data.data) {
+              setCoverLetter(retryRes.data.data.coverLetter || 'No cover letter layout parsed.');
+              setFeedback(retryRes.data.data.feedback || 'No optimization feedback parsed.');
+            }
+            console.log('✅ [Polling Matrix] Materials recovered successfully from database cache layer.');
+          } catch (retryErr) {
+            console.error('❌ [Polling Matrix Failure]:', retryErr);
+            setErrorMessage('The generation pipeline is taking longer than expected. Please wait a moment and click the button again to view cached results.');
+          } finally {
+            setGeneratingId(null);
+          }
+        }, 2500);
+      } else {
+        console.error('❌ Generation pipeline failure:', err);
+        // Ensure a fresh, descriptive message updates the screen layout
+        setErrorMessage(
+          err.response?.data?.message || 
+          'The AI model is experiencing a high volume of traffic. Please wait a moment and click retry.'
+        );
+        setGeneratingId(null);
+      }
     }
   };
+
+
 
   if (authLoading || !user) {
     return (
