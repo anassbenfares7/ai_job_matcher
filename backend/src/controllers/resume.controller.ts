@@ -1,12 +1,7 @@
 import { Response, NextFunction } from 'express';
-import { createRequire } from 'module';
 import { AuthenticatedRequest } from '../middleware/auth.js';
-import { parseResumeText } from '../services/ai.service.js';
+import { parseResumeText, generateEmbedding } from '../services/ai.service.js';
 import { db } from '../config/database.js';
-
-// Dynamically create a standard require loader to import CommonJS smoothly
-const require = createRequire(import.meta.url);
-const pdfParse = require('pdf-parse');
 
 export const uploadAndParseResume = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   // 1. Ensure a file buffer was successfully captured by Multer
@@ -26,41 +21,60 @@ export const uploadAndParseResume = async (req: AuthenticatedRequest, res: Respo
       });
     }
 
-    console.log(`⏳ [Resume Engine] Staging raw buffer parsing for user: ${userId}`);
+    console.log(`⏳ [Resume Engine] Processing Multi-Modal Document Stream for user: ${userId}`);
 
-    // 2. Extract raw text content out of the incoming file buffer memory pool
-    const pdfData = await pdfParse(req.file.buffer);
-    const rawText = pdfData.text ? pdfData.text.trim() : '';
+    // 2. Prepare the raw binary buffer layout data for direct Gemini consumption
+    const resumePart = {
+      inlineData: {
+        data: req.file.buffer.toString('base64'),
+        mimeType: 'application/pdf',
+      },
+    };
 
-    // 3. Implements the text validation check fallback strategy
-    if (rawText.length < 50) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'Parsing aborted. The uploaded PDF contains insufficient extractable text. Please ensure it is not a flat scanned image file.'
-      });
-    }
-
-    console.log(`⏳ [Gemini Core] Invoking structured JSON conversion schema...`);
-
-    // 4. Pass the validated raw text to our Gemini AI extraction service
-    const structuredData = await parseResumeText(rawText);
-
+    console.log(`⏳ [Gemini Core] Invoking multi-modal structured conversion schema...`);
+    
+    // 3. Pass the binary document directly to our Gemini AI extraction service
+    const structuredData = await parseResumeText(resumePart as any);
     console.log(`✅ [Gemini Core] Structural layout extraction verified successfully.`);
 
-    // 5. Commit the record directly to PostgreSQL (Leaving the vector embedding column null for the next step)
+    // 4. Synthesize a clean profile string targeted specifically for vector optimization
+    console.log(`⏳ [Vector Core] Synthesizing semantic profile summary string...`);
+    const skillsString = Array.isArray(structuredData.skills) ? structuredData.skills.join(', ') : '';
+    const rolesString = Array.isArray(structuredData.experience) 
+      ? structuredData.experience.map((exp: any) => `${exp.role} at ${exp.company}`).join(', ') 
+      : '';
+    
+    const embeddingInput = `
+      Professional Summary: ${structuredData.summary || ''}. 
+      Core Technical Skills: ${skillsString}. 
+      Professional Roles and Experience: ${rolesString}.
+    `.trim();
+
+    // 5. Generate the 768-dimensional embedding vector array
+    console.log(`⏳ [Gemini Embeddings] Generating mathematical vector array values...`);
+    const vectorArray = await generateEmbedding(embeddingInput);
+    
+    // Transform the floating point array cleanly into an explicit pgvector string format: '[val1,val2,...]'
+    const pgVectorString = `[${vectorArray.join(',')}]`;
+    console.log(`✅ [Vector Core] Vector array compiled. Committing profile row to database.`);
+
+        // 7. Commit the complete data model, including the vector string, to PostgreSQL
     const insertResult = await db.query(
-      `INSERT INTO resumes (user_id, raw_text, structured_data) 
-       VALUES ($1, $2, $3) 
+      `INSERT INTO resumes (user_id, raw_text, structured_data, embedding) 
+       VALUES ($1, $2, $3, $4::vector) 
        RETURNING id, created_at;`,
-      [userId, rawText, JSON.stringify(structuredData)]
+      [userId, embeddingInput, JSON.stringify(structuredData), pgVectorString]
     );
+
+    // 🚀 FIXED PROPERTY LOOKUP: Target index 0 of the returned rows collection array
+    const savedRow = insertResult.rows[0];
 
     return res.status(201).json({
       status: 'success',
-      message: 'Resume processed, parsed, and recorded successfully.',
+      message: 'Resume processed, parsed, embedded, and recorded successfully.',
       data: {
-        resumeId: insertResult.rows[0].id,
-        createdAt: insertResult.rows[0].created_at,
+        resumeId: savedRow.id,
+        createdAt: savedRow.created_at,
         parsedProfile: structuredData
       }
     });
