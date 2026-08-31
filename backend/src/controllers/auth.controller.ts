@@ -150,6 +150,7 @@ const googleClient = new OAuth2Client(env.GOOGLE_CLIENT_ID);
 export const googleSignIn = async (req: Request, res: Response, next: NextFunction) => {
   const { idToken } = req.body;
 
+  // 1. Structural body validation check
   if (!idToken) {
     return res.status(400).json({
       status: 'error',
@@ -158,50 +159,39 @@ export const googleSignIn = async (req: Request, res: Response, next: NextFuncti
   }
 
   try {
-    let googleEmail: string;
-    let googleId: string;
+    // 2. Query Google's authentication keys directly to verify the token signature
+    const ticket = await googleClient.verifyIdToken({
+      idToken,
+      audience: env.GOOGLE_CLIENT_ID,
+    });
 
-    // FIX: Safely catch and process sandbox environment mock signatures
-    if (env.NODE_ENV !== 'production' && idToken.includes('SimulatedSignatureParametersHere')) {
-      console.log('🛡️ [Backend Auth] Sandbox developer token detected. Bypassing external Google signature checks.');
-      googleEmail = "sandbox-developer@jobmatcher.ma";
-      googleId = "sandbox-developer-user-id-001";
-    } else {
-      // Normal Production Flow: Query Google directly to verify the real token signature
-      if (!env.GOOGLE_CLIENT_ID) {
-        throw new Error('Internal Configuration Failure: GOOGLE_CLIENT_ID is missing.');
-      }
-      
-      const googleClient = new OAuth2Client(env.GOOGLE_CLIENT_ID);
-      const ticket = await googleClient.verifyIdToken({
-        idToken,
-        audience: env.GOOGLE_CLIENT_ID,
+    const payload = ticket.getPayload();
+    if (!payload || !payload.email) {
+      return res.status(401).json({
+        status: 'error',
+        message: 'Google token validation failed. Unable to extract profile metadata identifiers.'
       });
-
-      const payload = ticket.getPayload();
-      if (!payload || !payload.email) {
-        return res.status(401).json({
-          status: 'error',
-          message: 'Google token validation failed. Unable to extract profile metadata identifiers.'
-        });
-      }
-
-      googleEmail = payload.email.toLowerCase().trim();
-      googleId = payload.sub;
     }
 
+    const googleEmail = payload.email.toLowerCase().trim();
+    const googleId = payload.sub; // Google's unique, permanent user ID identifier string
+
     // 3. Look up or Upsert the user into our PostgreSQL instance safely
+    // Check if user already exists by email
     let userQuery = await db.query('SELECT * FROM users WHERE email = $1;', [googleEmail]);
     let user;
 
     if (userQuery.rows.length === 0) {
+      // Create a brand new user for OAuth sign-in
       const insertQuery = await db.query(
         'INSERT INTO users (email, google_id) VALUES ($1, $2) RETURNING id, email, created_at;',
         [googleEmail, googleId]
       );
-      user = insertQuery.rows[0]; // Fix array destructuring array bug
+      user = insertQuery.rows[0];
     } else {
-      user = userQuery.rows[0]; // Fix array destructuring array bug
+      user = userQuery.rows[0];
+      
+      // If user signed up via email previously but is now linking Google, bind the google_id smoothly
       if (!user.google_id) {
         await db.query('UPDATE users SET google_id = $1 WHERE id = $2;', [googleId, user.id]);
         user.google_id = googleId;
@@ -217,7 +207,7 @@ export const googleSignIn = async (req: Request, res: Response, next: NextFuncti
 
     return res.status(200).json({
       status: 'success',
-      message: 'Google Sign-In authentication successful.',
+      message: 'Google Single Sign-In authentication successful.',
       data: {
         token,
         user: {
@@ -228,11 +218,11 @@ export const googleSignIn = async (req: Request, res: Response, next: NextFuncti
       }
     });
 
-  } catch (error: any) {
-    console.error('❌ Google OAuth Verification Routine Error:', error.message);
+  } catch (error) {
+    console.error('❌ Google OAuth Verification Routine Error:', error);
     return res.status(401).json({
       status: 'error',
-      message: 'Authentication failed. The provided token could not be verified securely.'
+      message: 'Authentication failed. The provided Google access token is invalid or structurally corrupt.'
     });
   }
 };
