@@ -19,11 +19,14 @@ describe("semantic match flows", () => {
 
   it("returns an empty list when the user has no uploaded resume", async () => {
     const { db } = await import("../src/config/database.js");
-    const { getSemanticMatches } = await import("../src/controllers/match.controller.js");
+    const { getSemanticMatches } =
+      await import("../src/controllers/match.controller.js");
 
     vi.spyOn(db, "query").mockResolvedValueOnce({ rows: [] } as any);
 
-    const req = { user: { id: "11111111-1111-4111-8111-111111111111" } } as any;
+    const req = {
+      user: { id: "11111111-1111-4111-8111-111111111111" },
+    } as any;
     const res = makeMockRes();
     const next = vi.fn();
 
@@ -32,7 +35,8 @@ describe("semantic match flows", () => {
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({
       status: "success",
-      message: "No active profile found. Please upload a CV first to activate semantic job matching.",
+      message:
+        "No active profile found. Please upload a CV first to activate semantic job matching.",
       data: [],
     });
     expect(next).not.toHaveBeenCalled();
@@ -40,7 +44,8 @@ describe("semantic match flows", () => {
 
   it("returns ranked matches when a resume embedding exists", async () => {
     const { db } = await import("../src/config/database.js");
-    const { getSemanticMatches } = await import("../src/controllers/match.controller.js");
+    const { getSemanticMatches } =
+      await import("../src/controllers/match.controller.js");
 
     vi.spyOn(db, "query")
       .mockResolvedValueOnce({
@@ -67,7 +72,9 @@ describe("semantic match flows", () => {
         ],
       } as any);
 
-    const req = { user: { id: "11111111-1111-4111-8111-111111111111" } } as any;
+    const req = {
+      user: { id: "11111111-1111-4111-8111-111111111111" },
+    } as any;
     const res = makeMockRes();
     const next = vi.fn();
 
@@ -95,7 +102,8 @@ describe("semantic match flows", () => {
   });
 
   it("rejects requests without an authenticated user", async () => {
-    const { getSemanticMatches } = await import("../src/controllers/match.controller.js");
+    const { getSemanticMatches } =
+      await import("../src/controllers/match.controller.js");
 
     const req = { user: undefined } as any;
     const res = makeMockRes();
@@ -106,7 +114,8 @@ describe("semantic match flows", () => {
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalledWith({
       status: "error",
-      message: "Unauthorized execution context. Missing user identifier session markers.",
+      message:
+        "Unauthorized execution context. Missing user identifier session markers.",
     });
     expect(next).not.toHaveBeenCalled();
   });
