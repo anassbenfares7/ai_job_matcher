@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Response } from "express";
-import { db } from "../src/config/database.js";
 
 const makeMockRes = () => {
   const res: Partial<Response> = {
@@ -52,8 +51,8 @@ describe("resume upload flows", () => {
   });
 
   it("parses and stores a valid resume payload successfully", async () => {
+    const { db } = await import("../src/config/database.js");
     const { uploadAndParseResume } = await import("../src/controllers/resume.controller.js");
-    const { parseResumeText, generateEmbedding } = await import("../src/services/ai.service.js");
 
     vi.spyOn(await import("../src/services/ai.service.js"), "parseResumeText").mockResolvedValue({
       fullName: "Test User",
@@ -73,7 +72,7 @@ describe("resume upload flows", () => {
 
     const req = {
       file: { buffer: Buffer.from("fake-pdf") },
-      user: { id: "user-123" },
+      user: { id: "11111111-1111-4111-8111-111111111111" },
     } as any;
     const res = makeMockRes();
     const next = vi.fn();
