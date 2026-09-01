@@ -22,7 +22,14 @@ vi.mock("../src/config/database.js", () => ({
 
 vi.mock("google-auth-library", () => ({
   OAuth2Client: class {
-    verifyIdToken = vi.fn();
+    async verifyIdToken(options: any) {
+      return {
+        getPayload: () => ({
+          email: "test@gmail.com",
+          sub: "google-id-123",
+        }),
+      };
+    }
   },
 }));
 
@@ -124,5 +131,68 @@ describe("HTTP auth routes", () => {
       message:
         "Authentication failed. Invalid email address or credentials.",
     });
+  });
+
+  it("rejects Google sign-in with missing idToken", async () => {
+    const { default: app } = await import("../src/app.js");
+
+    const res = await request(app).post("/api/auth/google").send({});
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({
+      status: "error",
+      message:
+        "Invalid signature request. Missing Google idToken payload parameters.",
+    });
+  });
+
+  it("validates Google token and creates new user", async () => {
+    const { default: app } = await import("../src/app.js");
+
+    // Mock: No existing user
+    mockDbQuery.mockResolvedValueOnce({ rows: [] } as any);
+    // Mock: Insert new user
+    mockDbQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          id: "user-google-123",
+          email: "newuser@gmail.com",
+          created_at: "2025-01-01T00:00:00.000Z",
+        },
+      ],
+    } as any);
+
+    const res = await request(app)
+      .post("/api/auth/google")
+      .send({ idToken: "valid-google-token" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("success");
+    expect(res.body.data.token).toEqual(expect.any(String));
+    expect(res.body.data.user.email).toBe("newuser@gmail.com");
+  });
+
+  it("validates Google token and returns existing user", async () => {
+    const { default: app } = await import("../src/app.js");
+
+    // Mock: Existing user found
+    mockDbQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          id: "user-existing-456",
+          email: "test@gmail.com",
+          created_at: "2024-12-01T00:00:00.000Z",
+        },
+      ],
+    } as any);
+
+    const res = await request(app)
+      .post("/api/auth/google")
+      .send({ idToken: "valid-google-token" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("success");
+    expect(res.body.data.token).toEqual(expect.any(String));
+    expect(res.body.data.user.email).toBe("test@gmail.com");
   });
 });

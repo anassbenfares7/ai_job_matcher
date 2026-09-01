@@ -45,7 +45,8 @@ describe("HTTP resume routes", () => {
     expect(res.status).toBe(401);
     expect(res.body).toEqual({
       status: "error",
-      message: "Authentication failed. Missing or malformed token access header.",
+      message:
+        "Authentication failed. Missing or malformed token access header.",
     });
   });
 
@@ -54,7 +55,10 @@ describe("HTTP resume routes", () => {
     const jwt = await import("jsonwebtoken");
 
     const token = jwt.sign(
-      { id: "11111111-1111-4111-8111-111111111111", email: "test@example.com" },
+      {
+        id: "11111111-1111-4111-8111-111111111111",
+        email: "test@example.com",
+      },
       "test-jwt-secret",
       { expiresIn: "1h" },
     );
@@ -67,7 +71,8 @@ describe("HTTP resume routes", () => {
     expect(res.status).toBe(400);
     expect(res.body).toEqual({
       status: "error",
-      message: "Payload unfulfilled. Please attach a valid PDF document under the field key \"resume\".",
+      message:
+        'Payload unfulfilled. Please attach a valid PDF document under the field key "resume".',
     });
   });
 
@@ -77,7 +82,10 @@ describe("HTTP resume routes", () => {
     const ai = await import("../src/services/ai.service.js");
 
     const token = jwt.sign(
-      { id: "11111111-1111-4111-8111-111111111111", email: "test@example.com" },
+      {
+        id: "11111111-1111-4111-8111-111111111111",
+        email: "test@example.com",
+      },
       "test-jwt-secret",
       { expiresIn: "1h" },
     );
@@ -87,13 +95,24 @@ describe("HTTP resume routes", () => {
       summary: "Full stack developer",
       skills: ["TypeScript", "Node.js"],
       education: [{ degree: "BSc", institution: "UI", year: "2020" }],
-      experience: [{ role: "Developer", company: "Acme", duration: "2020-2024", description: "Built apps" }],
+      experience: [
+        {
+          role: "Developer",
+          company: "Acme",
+          duration: "2020-2024",
+          description: "Built apps",
+        },
+      ],
     });
 
-    vi.mocked(ai.generateEmbedding).mockResolvedValue(Array.from({ length: 768 }, () => 0.1));
+    vi.mocked(ai.generateEmbedding).mockResolvedValue(
+      Array.from({ length: 768 }, () => 0.1),
+    );
 
     mockDbQuery.mockResolvedValueOnce({
-      rows: [{ id: "resume-1", created_at: "2025-01-01T00:00:00.000Z" }],
+      rows: [
+        { id: "resume-1", created_at: "2025-01-01T00:00:00.000Z" },
+      ],
     } as any);
 
     const res = await request(app)

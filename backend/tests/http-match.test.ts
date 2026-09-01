@@ -35,7 +35,8 @@ describe("HTTP match routes", () => {
     expect(res.status).toBe(401);
     expect(res.body).toEqual({
       status: "error",
-      message: "Authentication failed. Missing or malformed token access header.",
+      message:
+        "Authentication failed. Missing or malformed token access header.",
     });
   });
 
@@ -44,7 +45,10 @@ describe("HTTP match routes", () => {
     const jwt = await import("jsonwebtoken");
 
     const token = jwt.sign(
-      { id: "11111111-1111-4111-8111-111111111111", email: "test@example.com" },
+      {
+        id: "11111111-1111-4111-8111-111111111111",
+        email: "test@example.com",
+      },
       "test-jwt-secret",
       { expiresIn: "1h" },
     );
@@ -59,7 +63,8 @@ describe("HTTP match routes", () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
       status: "success",
-      message: "No active profile found. Please upload a CV first to activate semantic job matching.",
+      message:
+        "No active profile found. Please upload a CV first to activate semantic job matching.",
       data: [],
     });
   });
@@ -69,7 +74,10 @@ describe("HTTP match routes", () => {
     const jwt = await import("jsonwebtoken");
 
     const token = jwt.sign(
-      { id: "11111111-1111-4111-8111-111111111111", email: "test@example.com" },
+      {
+        id: "11111111-1111-4111-8111-111111111111",
+        email: "test@example.com",
+      },
       "test-jwt-secret",
       { expiresIn: "1h" },
     );

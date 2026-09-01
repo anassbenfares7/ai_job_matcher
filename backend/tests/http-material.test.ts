@@ -41,7 +41,8 @@ describe("HTTP material routes", () => {
     expect(res.status).toBe(401);
     expect(res.body).toEqual({
       status: "error",
-      message: "Authentication failed. Missing or malformed token access header.",
+      message:
+        "Authentication failed. Missing or malformed token access header.",
     });
   });
 
@@ -50,7 +51,10 @@ describe("HTTP material routes", () => {
     const jwt = await import("jsonwebtoken");
 
     const token = jwt.sign(
-      { id: "11111111-1111-4111-8111-111111111111", email: "test@example.com" },
+      {
+        id: "11111111-1111-4111-8111-111111111111",
+        email: "test@example.com",
+      },
       "test-jwt-secret",
       { expiresIn: "1h" },
     );
@@ -72,7 +76,10 @@ describe("HTTP material routes", () => {
     const jwt = await import("jsonwebtoken");
 
     const token = jwt.sign(
-      { id: "11111111-1111-4111-8111-111111111111", email: "test@example.com" },
+      {
+        id: "11111111-1111-4111-8111-111111111111",
+        email: "test@example.com",
+      },
       "test-jwt-secret",
       { expiresIn: "1h" },
     );
@@ -96,7 +103,8 @@ describe("HTTP material routes", () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
       status: "success",
-      message: "Tailored application materials retrieved successfully from local cache.",
+      message:
+        "Tailored application materials retrieved successfully from local cache.",
       data: {
         matchScore: 0.92,
         coverLetter: "Dear Hiring Manager...",
@@ -111,7 +119,10 @@ describe("HTTP material routes", () => {
     const ai = await import("../src/services/ai.service.js");
 
     const token = jwt.sign(
-      { id: "11111111-1111-4111-8111-111111111111", email: "test@example.com" },
+      {
+        id: "11111111-1111-4111-8111-111111111111",
+        email: "test@example.com",
+      },
       "test-jwt-secret",
       { expiresIn: "1h" },
     );
@@ -158,7 +169,9 @@ describe("HTTP material routes", () => {
 
     expect(res.status).toBe(201);
     expect(res.body.status).toBe("success");
-    expect(res.body.data.coverLetter).toBe("Generated cover letter content");
+    expect(res.body.data.coverLetter).toBe(
+      "Generated cover letter content",
+    );
     expect(res.body.data.feedback).toBe("Generated feedback on fit");
     expect(res.body.data.matchScore).toBe(0.75); // Fallback score
   });
@@ -168,7 +181,10 @@ describe("HTTP material routes", () => {
     const jwt = await import("jsonwebtoken");
 
     const token = jwt.sign(
-      { id: "11111111-1111-4111-8111-111111111111", email: "test@example.com" },
+      {
+        id: "11111111-1111-4111-8111-111111111111",
+        email: "test@example.com",
+      },
       "test-jwt-secret",
       { expiresIn: "1h" },
     );
@@ -196,7 +212,10 @@ describe("HTTP material routes", () => {
     const jwt = await import("jsonwebtoken");
 
     const token = jwt.sign(
-      { id: "11111111-1111-4111-8111-111111111111", email: "test@example.com" },
+      {
+        id: "11111111-1111-4111-8111-111111111111",
+        email: "test@example.com",
+      },
       "test-jwt-secret",
       { expiresIn: "1h" },
     );
@@ -226,7 +245,8 @@ describe("HTTP material routes", () => {
     expect(res.status).toBe(400);
     expect(res.body).toEqual({
       status: "error",
-      message: "Generation aborted. Please upload a CV profile before generating tailored content.",
+      message:
+        "Generation aborted. Please upload a CV profile before generating tailored content.",
     });
   });
 });
