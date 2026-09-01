@@ -1,0 +1,67 @@
+version: "3.8"
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: morocco-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-morocco}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-morocco_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-morocco_ai}
+    ports:
+      - "5432:5432"
+    volumes:
+      # Persist data across container restarts
+      - postgres_data:/var/lib/postgresql/data
+      # Initialize database with schema
+      - ./backend/src/config/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./backend/src/config/seed.ts:/docker-entrypoint-initdb.d/02-seed.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-morocco}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend Express API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: morocco-api
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://${POSTGRES_USER:-morocco}:${POSTGRES_PASSWORD:-morocco_dev_password}@postgres:5432/${POSTGRES_DB:-morocco_ai}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-key-change-in-production}
+      PORT: 5000
+    ports:
+      - "5000:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      # Hot reload with nodemon (optional)
+      - ./backend/src:/app/src
+    command: npm run dev
+
+  # Frontend Next.js
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: morocco-web
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:5000/api
+      NODE_ENV: development
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend/src:/app/src
+
+volumes:
+  postgres_data:
+    driver: local

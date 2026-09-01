@@ -10,19 +10,40 @@ The frontend uses a clean, Medium-inspired editorial interface focused on readab
 
 ## ✨ Features
 
-* 📄 **AI CV Analysis** — Extract structured information from PDF resumes, including complex multi-column layouts.
-* 🧠 **Semantic Job Matching** — Compare candidate profiles with job descriptions using 768-dimensional embeddings.
-* 📊 **Match Scores** — Convert cosine similarity into an easy-to-understand percentage.
-* ✍️ **AI Cover Letters** — Generate job-specific application materials.
-* 🎯 **ATS Feedback** — Provide feedback aimed at improving application relevance.
-* 💾 **Database Caching** — Store generated application materials to avoid unnecessary repeated AI requests.
-* 🔐 **JWT Authentication** — Protected dashboard and authenticated API requests.
-* 📱 **Responsive UI** — Editorial-style interface designed for desktop and mobile layouts.
-* ⚡ **Fault-Tolerant Generation** — Retry generation requests when long-running AI operations cause network timeouts.
+- 📄 **AI CV Analysis** — Extract structured information from PDF resumes, including complex multi-column layouts.
+- 🧠 **Semantic Job Matching** — Compare candidate profiles with job descriptions using 768-dimensional embeddings.
+- 📊 **Match Scores** — Convert cosine similarity into an easy-to-understand percentage.
+- ✍️ **AI Cover Letters** — Generate job-specific application materials.
+- 🎯 **ATS Feedback** — Provide feedback aimed at improving application relevance.
+- 💾 **Database Caching** — Store generated application materials to avoid unnecessary repeated AI requests.
+- 🔐 **JWT Authentication** — Protected dashboard and authenticated API requests.
+- 📱 **Responsive UI** — Editorial-style interface designed for desktop and mobile layouts.
+- ⚡ **Fault-Tolerant Generation** — Retry generation requests when long-running AI operations cause network timeouts.
 
 ---
 
-## 🏗️ Architecture
+## 🚀 Deployment
+
+**Ready for production?** Follow our deployment guides:
+
+- **🎯 [Quick Start (5 min)](./QUICK_START.md)** — Deploy in minutes
+- **📘 [Full Deployment Guide](./DEPLOYMENT.md)** — Step-by-step with Docker, CI/CD, and server setup
+- **✅ [Production Checklist](./PRODUCTION_CHECKLIST.md)** — Pre-launch verification
+
+### TL;DR
+
+```bash
+# Local testing
+docker-compose up -d
+
+# Production deployment
+ssh root@your-server && \
+curl -fsSL https://get.docker.com | sh && \
+git clone <repo> /app && cd /app && \
+docker-compose -f docker-compose.prod.yml up -d
+```
+
+---
 
 ```text
 ai-job-matcher/
@@ -146,11 +167,11 @@ Instead of relying exclusively on traditional PDF text extraction, the system ca
 
 This makes the pipeline better suited for resumes containing:
 
-* Multi-column layouts
-* Visual formatting
-* Canva-generated CVs
-* Structured sections
-* Non-standard resume designs
+- Multi-column layouts
+- Visual formatting
+- Canva-generated CVs
+- Structured sections
+- Non-standard resume designs
 
 The AI extracts structured information that can then be embedded and stored in PostgreSQL.
 
@@ -303,10 +324,10 @@ CREATE TABLE applications_and_matches (
 
 Make sure you have:
 
-* **Node.js 20+**
-* **PostgreSQL**
-* **pgvector**
-* A **Google AI Studio API key**
+- **Node.js 20+**
+- **PostgreSQL**
+- **pgvector**
+- A **Google AI Studio API key**
 
 ---
 
@@ -397,14 +418,14 @@ The dashboard follows a **Medium-inspired editorial design system**.
 
 ### Design Principles
 
-* Minimal visual noise
-* Strong typography hierarchy
-* Generous whitespace
-* Serif typography for long-form content
-* Sans-serif typography for interface elements
-* Subtle borders instead of heavy cards
-* Responsive layouts
-* Focused application workflow
+- Minimal visual noise
+- Strong typography hierarchy
+- Generous whitespace
+- Serif typography for long-form content
+- Sans-serif typography for interface elements
+- Subtle borders instead of heavy cards
+- Responsive layouts
+- Focused application workflow
 
 ### Smart Navigation
 
@@ -507,12 +528,12 @@ the system asks:
 
 Built as a full-stack AI engineering project focused on:
 
-* AI integration
-* Semantic search
-* Vector databases
-* PostgreSQL
-* Full-stack TypeScript
-* AI-assisted recruitment workflows
+- AI integration
+- Semantic search
+- Vector databases
+- PostgreSQL
+- Full-stack TypeScript
+- AI-assisted recruitment workflows
 
 ---
 
