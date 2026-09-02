@@ -2,6 +2,10 @@
   "name": "morocco-ai-job-matcher",
   "private": true,
   "version": "1.0.0",
+  "scripts": {
+    "build": "cd backend && npm ci && npm run build",
+    "start": "cd backend && npm start"
+  },
   "engines": {
     "node": ">=22"
   }
