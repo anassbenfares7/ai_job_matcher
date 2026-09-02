@@ -3,7 +3,7 @@ builder = "RAILPACK"
 buildCommand = "cd backend && npm ci && npm run build"
 
 [deploy]
-startCommand = "cd backend && npm start"
+startCommand = "cd backend && npm ci --omit=dev && npm start"
 healthcheckPath = "/health"
 healthcheckTimeout = 100
 restartPolicyType = "ON_FAILURE"

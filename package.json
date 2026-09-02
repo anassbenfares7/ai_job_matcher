@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "scripts": {
     "build": "cd backend && npm ci && npm run build",
-    "start": "cd backend && npm start"
+    "start": "cd backend && npm ci --omit=dev && npm start"
   },
   "engines": {
     "node": ">=22"
