@@ -25,4 +25,5 @@ export const env = {
   GEMINI_API_KEY: process.env.GEMINI_API_KEY as string,
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID as string,
   JWT_SECRET: process.env.JWT_SECRET as string,
+  FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:3000',
 };
