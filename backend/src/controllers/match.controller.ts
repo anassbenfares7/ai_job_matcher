@@ -39,12 +39,13 @@ export const getSemanticMatches = async (req: AuthenticatedRequest, res: Respons
     // 2. Perform Cosine Distance lookup (<=>). 
     // Convert Cosine Distance to Similarity Score: (1 - distance)
     const matchQuery = await db.query(
-      `SELECT 
-        id, 
-        title, 
-        company, 
-        location, 
+      `SELECT
+        id,
+        title,
+        company,
+        location,
         description,
+        apply_url,
         (1 - (embedding <=> $1::vector)) AS match_score
        FROM job_postings
        ORDER BY embedding <=> $1::vector
@@ -59,10 +60,25 @@ export const getSemanticMatches = async (req: AuthenticatedRequest, res: Respons
       company: job.company,
       location: job.location,
       description: job.description,
+      applyUrl: job.apply_url || null,
       matchPercentage: Math.max(0, Math.min(100, Math.round(parseFloat(job.match_score) * 100)))
     }));
 
     console.log(`✅ [Matching Engine] Successfully ranked and mapped ${rankedMatches.length} semantic matches.`);
+
+    // 4. Persist the computed scores so material generation reuses the real number
+    // instead of the 0.75 fallback. One upsert per ranked job; only the score is
+    // touched here — cover letter / feedback columns are left untouched.
+    for (const job of matchQuery.rows) {
+      const score = Math.max(0, Math.min(1, parseFloat(job.match_score) || 0));
+      await db.query(
+        `INSERT INTO applications_and_matches (user_id, job_posting_id, match_score)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (user_id, job_posting_id)
+         DO UPDATE SET match_score = EXCLUDED.match_score;`,
+        [userId, job.id, score.toFixed(4)]
+      );
+    }
 
     return res.status(200).json({
       status: 'success',

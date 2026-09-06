@@ -16,7 +16,7 @@ export const parseResumeText = async (resumePart: { inlineData: { data: string; 
         `Analyze the attached resume document. Extract the candidate's full name, core skills, educational background, and professional experience timeline.`
       ],
       config: {
-        systemInstruction: "You are an expert technical recruiter analyzing tech profiles for the Moroccan job market. Extract structural data accurately. If a field cannot be found, leave it empty or map it logically.",
+        systemInstruction: "You are an expert recruiter analyzing candidate profiles across all industries and professions for the Moroccan job market. Extract structured data accurately. If a field cannot be found, leave it empty or map it logically.",
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
@@ -26,7 +26,7 @@ export const parseResumeText = async (resumePart: { inlineData: { data: string; 
             skills: {
               type: Type.ARRAY,
               items: { type: Type.STRING },
-              description: "Technical stack, programming languages, tools, frameworks, and methodologies."
+              description: "Skills, competencies, tools, software, certifications, languages, and methodologies relevant to the candidate's field."
             },
             education: {
               type: Type.ARRAY,
@@ -131,7 +131,7 @@ export const generateApplicationMaterials = async (
     const response = await ai.models.generateContent({
       model: 'gemini-3.6-flash', // 🚀 Updated to the latest production standard
       contents: `
-        You are a premier executive recruiter specializing in the Moroccan tech hubs of Casablanca, Rabat, and Tangier. 
+        You are a premier executive recruiter operating across all industries and professions in Morocco, including hubs such as Casablanca, Rabat, Tangier, and Marrakesh.
         Analyze the candidate's structured profile alongside the job opening metadata to produce high-value application assets.
         
         [JOB DATA]
@@ -154,7 +154,7 @@ export const generateApplicationMaterials = async (
         
         Section 2: CV Optimization Feedback.
         - Provide 3-4 highly actionable bullet points.
-        - Detail precisely which missing technical tools, framework alignments, or resume phrasing improvements are needed to pass local ATS screens for this exact position.
+        - Detail precisely which missing skills, qualifications, certifications, experience, or resume phrasing improvements are needed to pass local ATS screens for this exact position.
       `,
       config: {
         systemInstruction: "You are an AI recruitment asset engine. Output your response cleanly using markdown formatting inside the two split blocks. Do not add intro or wrap text like 'Here is your request'."

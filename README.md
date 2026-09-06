@@ -1,8 +1,10 @@
 # AI Job Matcher
 
-> An AI-powered job matching platform built for the Moroccan tech ecosystem.
+> An AI-powered job matching platform built for the Moroccan job market.
 
 AI Job Matcher analyzes a candidate's CV, converts their profile into a semantic vector, and matches it against job postings using **PostgreSQL + pgvector**. It also generates tailored application materials for each matched position.
+
+Job listings are pulled from the free [Jooble API](https://jooble.org/api/about) across a range of professions (IT, marketing, finance, HR, sales, engineering, logistics, healthcare) — it is not limited to tech roles.
 
 The frontend uses a clean, Medium-inspired editorial interface focused on readability and distraction-free interaction.
 
@@ -42,6 +44,20 @@ curl -fsSL https://get.docker.com | sh && \
 git clone <repo> /app && cd /app && \
 docker-compose -f docker-compose.prod.yml up -d
 ```
+
+### Keeping jobs fresh (scheduled ingest)
+
+The job list only updates when the ingest script runs. To refresh it automatically
+on Railway, add a **separate service** from the same repo:
+
+- **Build:** `cd backend && npm ci && npm run build`
+- **Start / Cron command:** `cd backend && npm run ingest:prod`
+- **Cron schedule:** e.g. `0 6 * * *` (daily at 06:00 UTC)
+- **Env vars:** same `DATABASE_URL`, `GEMINI_API_KEY`, `JOOBLE_API_KEY` as the backend
+
+Railway runs the command on schedule, it exits when done, and the web service is
+untouched. `ingest:prod` runs the compiled script directly (no `tsx`), so it works
+with production-only dependencies.
 
 ---
 
@@ -364,6 +380,9 @@ DATABASE_URL=postgresql://<username>:<password>@localhost:5432/ai_job_matcher
 JWT_SECRET=your_jwt_secret
 
 GEMINI_API_KEY=your_google_ai_studio_api_key
+
+# Free key from https://jooble.org/api/about — only needed to pull real job listings
+JOOBLE_API_KEY=your_jooble_api_key
 ```
 
 ---
@@ -372,11 +391,20 @@ GEMINI_API_KEY=your_google_ai_studio_api_key
 
 Run the SQL schema above inside PostgreSQL.
 
-Then seed the development job data:
+Then load job data. Two options:
 
 ```bash
-npx tsx src/config/seed.ts
+# Real listings from the Jooble API (needs JOOBLE_API_KEY) — recommended
+npm run ingest
+
+# OR: 4 hand-written mock jobs, for offline/demo use with no Jooble key
+npm run seed
 ```
+
+`npm run ingest` fetches jobs across several professions, generates an embedding
+for each, and skips any it has already stored (deduplicated by the provider's
+job id). Re-run it any time to pull fresh listings. To clear everything and start
+over: `TRUNCATE TABLE job_postings CASCADE;` then re-run.
 
 ---
 
@@ -512,7 +540,7 @@ AI Application Generation
 
 ## 🎯 Project Goal
 
-The goal of AI Job Matcher is to make job discovery more relevant for developers and technology professionals in Morocco by replacing simple keyword-based matching with **semantic understanding**.
+The goal of AI Job Matcher is to make job discovery more relevant for job seekers across all professions in Morocco by replacing simple keyword-based matching with **semantic understanding**.
 
 Instead of asking:
 

@@ -14,6 +14,7 @@ import {
   AlertCircle,
   Loader2,
   Feather,
+  ExternalLink,
 } from 'lucide-react';
 
 interface JobMatch {
@@ -22,6 +23,7 @@ interface JobMatch {
   company: string;
   location: string;
   description: string;
+  applyUrl: string | null;
   matchPercentage: number;
 }
 
@@ -326,7 +328,7 @@ export default function DashboardPage() {
                       {job.description}
                     </p>
 
-                    <div className="pt-2 flex items-center justify-between">
+                    <div className="pt-2 flex items-center gap-5">
                       <button
                         onClick={() =>
                           handleGenerateMaterials(job)
@@ -340,6 +342,19 @@ export default function DashboardPage() {
                           Tailor Application View
                         </span>
                       </button>
+
+                      {job.applyUrl && (
+                        <a
+                          href={job.applyUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-muted hover:text-main font-bold flex items-center gap-1.5 transition-colors border-b border-transparent hover:border-main pb-0.5"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+
+                          <span>Apply</span>
+                        </a>
+                      )}
                     </div>
                   </div>
 

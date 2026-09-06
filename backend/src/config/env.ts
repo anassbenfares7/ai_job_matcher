@@ -28,4 +28,6 @@ export const env = {
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID as string,
   JWT_SECRET: process.env.JWT_SECRET as string,
   FRONTEND_URL: process.env.FRONTEND_URL || "http://localhost:3000",
+  // Optional: only the job ingest script needs this, not the web server.
+  JOOBLE_API_KEY: process.env.JOOBLE_API_KEY || "",
 };

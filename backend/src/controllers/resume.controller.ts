@@ -45,8 +45,8 @@ export const uploadAndParseResume = async (req: AuthenticatedRequest, res: Respo
       : '';
     
     const embeddingInput = `
-      Professional Summary: ${structuredData.summary || ''}. 
-      Core Technical Skills: ${skillsString}. 
+      Professional Summary: ${structuredData.summary || ''}.
+      Core Skills: ${skillsString}.
       Professional Roles and Experience: ${rolesString}.
     `.trim();
 
