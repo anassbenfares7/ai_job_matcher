@@ -1,5 +1,6 @@
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
+import { env } from "./config/env.js";
 import authRoutes from "./routes/auth.routes.js"; // Import our new routing layer
 import resumeRoutes from "./routes/resume.routes.js";
 import matchRoutes from "./routes/match.routes.js";
@@ -7,9 +8,20 @@ import materialRoutes from "./routes/material.routes.js";
 
 const app = express();
 
+const isProduction = env.NODE_ENV === "production";
+
+// FRONTEND_URL must be set explicitly in production — silently falling back
+// to localhost would block every real request with a CORS error instead of
+// failing loudly at startup.
+if (isProduction && !process.env.FRONTEND_URL) {
+  console.error(
+    "❌ FRONTEND_URL was not set in production. CORS will reject all frontend requests.",
+  );
+}
+
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    origin: isProduction ? env.FRONTEND_URL : "http://localhost:3000",
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   }),
