@@ -9,6 +9,14 @@ RUN npm ci
 
 COPY . .
 
+# NEXT_PUBLIC_* vars are inlined into the JS bundle at build time, so Docker
+# needs them declared as ARG here — without this, Railway's dashboard
+# variables never reach the `npm run build` step, no matter what's set there.
+ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_GOOGLE_CLIENT_ID
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_GOOGLE_CLIENT_ID=$NEXT_PUBLIC_GOOGLE_CLIENT_ID
+
 # Build Next.js
 RUN npm run build
 
