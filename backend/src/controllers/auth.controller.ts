@@ -4,12 +4,11 @@ import jwt from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
 import { db } from '../config/database.js';
 import { env } from '../config/env.js';
-import { sendVerificationEmail } from '../services/email.service.js';
+import { sendApprovalRequestEmail } from '../services/email.service.js';
 import {
-  createEmailVerificationToken,
+  createApprovalToken,
   hashToken,
-  isVerificationExpired,
-  canResendVerification,
+  canResendApprovalRequest,
 } from '../utils/tokens.js';
 
 // --- Shared helpers ---------------------------------------------------------
@@ -25,22 +24,42 @@ const toPublicUser = (user: any) => ({
 
 // Same wording whether or not the email is already registered — stops attackers
 // enumerating which addresses have accounts.
-const REGISTER_GENERIC = {
+const SIGNUP_GENERIC = {
   status: 'success' as const,
   message:
-    'Account created. Check your email for a verification link to activate it.',
+    'Account created. An admin will review it shortly — you can sign in once it is approved.',
 };
 
-// --- Registration ---------------------------------------------------------
+/**
+ * Give a pending user a fresh approval token and email the admin a review link.
+ * Never throws — a mail failure is logged, not surfaced to the registrant.
+ */
+const requestApproval = async (userId: string, userEmail: string): Promise<void> => {
+  const { token, tokenHash } = createApprovalToken();
+  await db.query(
+    'UPDATE users SET approval_token_hash = $1, approval_requested_at = NOW() WHERE id = $2;',
+    [tokenHash, userId],
+  );
+  try {
+    await sendApprovalRequestEmail(env.ADMIN_EMAIL, {
+      userEmail,
+      token,
+      signedUpAt: new Date(),
+    });
+  } catch (mailError) {
+    console.error('❌ [Approval] Review email failed to send:', mailError);
+  }
+};
+
+// --- Registration --------------------------------------------------------
 
 /**
- * Register a new user. Creates the account in an unverified state, emails a
- * verification link, and returns NO session token — the user must verify first.
+ * Register a new user. Creates the account in a pending state, emails the admin
+ * a review link, and returns NO session token.
  */
 export const registerUser = async (req: Request, res: Response, next: NextFunction) => {
   const { email, password } = req.body;
 
-  // 1. Input validation
   if (!email || !password || !email.includes('@')) {
     return res.status(400).json({
       status: 'error',
@@ -58,124 +77,112 @@ export const registerUser = async (req: Request, res: Response, next: NextFuncti
   const normalizedEmail = email.toLowerCase().trim();
 
   try {
-    // 2. Look for an existing account (parameterized query)
     const existing = await db.query(
-      'SELECT id, email_verified, email_verification_sent_at FROM users WHERE email = $1;',
-      [normalizedEmail]
+      'SELECT id, is_approved, approval_requested_at FROM users WHERE email = $1;',
+      [normalizedEmail],
     );
 
     if (existing.rows.length > 0) {
       const user = existing.rows[0];
-
-      // Account exists but was never verified — quietly resend the link if the
-      // cooldown has passed. Either way, respond with the generic message.
-      if (!user.email_verified && canResendVerification(user.email_verification_sent_at)) {
-        const { token, tokenHash } = createEmailVerificationToken();
-        await db.query(
-          'UPDATE users SET email_verification_token_hash = $1, email_verification_sent_at = NOW() WHERE id = $2;',
-          [tokenHash, user.id]
-        );
-        try {
-          await sendVerificationEmail(normalizedEmail, token);
-        } catch (mailError) {
-          console.error('❌ [Register] Verification email resend failed:', mailError);
-        }
+      // Still pending — re-notify the admin if the cooldown has passed. Respond
+      // with the generic message either way.
+      if (!user.is_approved && canResendApprovalRequest(user.approval_requested_at)) {
+        await requestApproval(user.id, normalizedEmail);
       }
-
-      return res.status(201).json(REGISTER_GENERIC);
+      return res.status(201).json(SIGNUP_GENERIC);
     }
 
-    // 3. Hash the password (12 salt rounds)
     const passwordHash = await bcrypt.hash(password, 12);
-
-    // 4. Create the unverified account with a verification token
-    const { token, tokenHash } = createEmailVerificationToken();
-    await db.query(
-      `INSERT INTO users (email, password_hash, email_verification_token_hash, email_verification_sent_at)
-       VALUES ($1, $2, $3, NOW());`,
-      [normalizedEmail, passwordHash, tokenHash]
+    const inserted = await db.query(
+      'INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id;',
+      [normalizedEmail, passwordHash],
     );
 
-    // 5. Send the verification email. A delivery failure does not roll back the
-    // account — the user can trigger "resend" — but it is logged.
-    try {
-      await sendVerificationEmail(normalizedEmail, token);
-    } catch (mailError) {
-      console.error('❌ [Register] Verification email failed to send:', mailError);
-    }
+    await requestApproval(inserted.rows[0].id, normalizedEmail);
 
-    return res.status(201).json(REGISTER_GENERIC);
+    return res.status(201).json(SIGNUP_GENERIC);
 
   } catch (error) {
     next(error);
   }
 };
 
-// --- Email verification ---------------------------------------------------
+// --- Admin review / approve / reject ------------------------------------
 
 /**
- * Confirm an emailed verification token. On success the account is marked
- * verified and a session token is returned so the click logs the user straight in.
+ * Read-only: look up the pending signup behind a review token so the admin page
+ * can show who it is. Safe for link prefetching.
  */
-export const verifyEmail = async (req: Request, res: Response, next: NextFunction) => {
-  const { token } = req.body;
+export const reviewSignup = async (req: Request, res: Response, next: NextFunction) => {
+  const token = (req.query.token || req.body?.token) as string | undefined;
 
   if (!token || typeof token !== 'string') {
-    return res.status(400).json({
-      status: 'error',
-      message: 'Verification token is missing or malformed.'
-    });
+    return res.status(400).json({ status: 'error', message: 'Review token is missing.' });
   }
 
   try {
-    const tokenHash = hashToken(token);
     const result = await db.query(
-      `SELECT id, email, email_verified, email_verification_sent_at, created_at
+      `SELECT email, is_approved, approval_requested_at, created_at
          FROM users
-        WHERE email_verification_token_hash = $1;`,
-      [tokenHash]
+        WHERE approval_token_hash = $1;`,
+      [hashToken(token)],
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'This review link is invalid or has already been used.'
+      });
+    }
+
+    const row = result.rows[0];
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        email: row.email,
+        signedUpAt: row.approval_requested_at || row.created_at,
+        alreadyApproved: row.is_approved,
+      }
+    });
+
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Approve the pending signup behind a review token. Idempotent-ish: a used token
+ * is gone, so a second click returns "invalid or already used".
+ */
+export const approveSignup = async (req: Request, res: Response, next: NextFunction) => {
+  const { token } = req.body;
+
+  if (!token || typeof token !== 'string') {
+    return res.status(400).json({ status: 'error', message: 'Approval token is missing.' });
+  }
+
+  try {
+    const result = await db.query(
+      `UPDATE users
+          SET is_approved = TRUE,
+              approval_token_hash = NULL,
+              approval_requested_at = NULL,
+              updated_at = NOW()
+        WHERE approval_token_hash = $1
+      RETURNING email;`,
+      [hashToken(token)],
     );
 
     if (result.rows.length === 0) {
       return res.status(400).json({
         status: 'error',
-        message: 'This verification link is invalid or has already been used.'
+        message: 'This review link is invalid or has already been used.'
       });
     }
-
-    const user = result.rows[0];
-
-    // Already verified (link clicked twice) — still hand back a session token.
-    if (user.email_verified) {
-      return res.status(200).json({
-        status: 'success',
-        message: 'Email address already verified.',
-        data: { token: signSessionToken(user), user: toPublicUser(user) }
-      });
-    }
-
-    if (isVerificationExpired(user.email_verification_sent_at)) {
-      return res.status(400).json({
-        status: 'error',
-        code: 'TOKEN_EXPIRED',
-        message: 'This verification link has expired. Please request a new one.'
-      });
-    }
-
-    await db.query(
-      `UPDATE users
-          SET email_verified = TRUE,
-              email_verification_token_hash = NULL,
-              email_verification_sent_at = NULL,
-              updated_at = NOW()
-        WHERE id = $1;`,
-      [user.id]
-    );
 
     return res.status(200).json({
       status: 'success',
-      message: 'Email verified successfully.',
-      data: { token: signSessionToken(user), user: toPublicUser(user) }
+      message: `Approved ${result.rows[0].email}. They can now sign in.`
     });
 
   } catch (error) {
@@ -184,49 +191,35 @@ export const verifyEmail = async (req: Request, res: Response, next: NextFunctio
 };
 
 /**
- * Resend the verification email. Always responds with the same generic message
- * (no account enumeration) and honours a per-account cooldown.
+ * Reject the pending signup behind a review token — deletes the account so the
+ * email address is free again. Won't touch an already-approved account.
  */
-export const resendVerification = async (req: Request, res: Response, next: NextFunction) => {
-  const { email } = req.body;
+export const rejectSignup = async (req: Request, res: Response, next: NextFunction) => {
+  const { token } = req.body;
 
-  const generic = {
-    status: 'success' as const,
-    message: 'If that account exists and still needs verification, a new link is on its way.'
-  };
-
-  if (!email || typeof email !== 'string' || !email.includes('@')) {
-    return res.status(200).json(generic);
+  if (!token || typeof token !== 'string') {
+    return res.status(400).json({ status: 'error', message: 'Review token is missing.' });
   }
 
   try {
-    const normalizedEmail = email.toLowerCase().trim();
     const result = await db.query(
-      'SELECT id, email_verified, email_verification_sent_at FROM users WHERE email = $1;',
-      [normalizedEmail]
+      `DELETE FROM users
+        WHERE approval_token_hash = $1 AND is_approved = FALSE
+      RETURNING email;`,
+      [hashToken(token)],
     );
 
-    if (result.rows.length === 0) return res.status(200).json(generic);
-
-    const user = result.rows[0];
-    if (user.email_verified) return res.status(200).json(generic);
-    if (!canResendVerification(user.email_verification_sent_at)) {
-      return res.status(200).json(generic);
+    if (result.rows.length === 0) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'This review link is invalid or has already been used.'
+      });
     }
 
-    const { token, tokenHash } = createEmailVerificationToken();
-    await db.query(
-      'UPDATE users SET email_verification_token_hash = $1, email_verification_sent_at = NOW() WHERE id = $2;',
-      [tokenHash, user.id]
-    );
-
-    try {
-      await sendVerificationEmail(normalizedEmail, token);
-    } catch (mailError) {
-      console.error('❌ [ResendVerification] Email failed to send:', mailError);
-    }
-
-    return res.status(200).json(generic);
+    return res.status(200).json({
+      status: 'success',
+      message: `Rejected and removed ${result.rows[0].email}.`
+    });
 
   } catch (error) {
     next(error);
@@ -235,9 +228,6 @@ export const resendVerification = async (req: Request, res: Response, next: Next
 
 // --- Login --------------------------------------------------------------
 
-/**
- * Handle user session login and password hash comparison
- */
 export const loginUser = async (req: Request, res: Response, next: NextFunction) => {
   const { email, password } = req.body;
 
@@ -249,10 +239,8 @@ export const loginUser = async (req: Request, res: Response, next: NextFunction)
   }
 
   try {
-    // 1. Look up the targeted user identity
     const userQuery = await db.query('SELECT * FROM users WHERE email = $1;', [email.toLowerCase().trim()]);
     if (userQuery.rows.length === 0) {
-      // Ambiguous error message to prevent email enumeration
       return res.status(401).json({
         status: 'error',
         message: 'Authentication failed. Invalid email address or credentials.'
@@ -261,7 +249,6 @@ export const loginUser = async (req: Request, res: Response, next: NextFunction)
 
     const user = userQuery.rows[0];
 
-    // 2. Block traditional login for Google OAuth-only accounts
     if (!user.password_hash) {
       return res.status(400).json({
         status: 'error',
@@ -269,7 +256,6 @@ export const loginUser = async (req: Request, res: Response, next: NextFunction)
       });
     }
 
-    // 3. Compare the supplied password against the stored hash
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
       return res.status(401).json({
@@ -278,17 +264,14 @@ export const loginUser = async (req: Request, res: Response, next: NextFunction)
       });
     }
 
-    // 4. Block unverified accounts (password was correct, so revealing this is an
-    // accepted trade-off).
-    if (!user.email_verified) {
+    if (!user.is_approved) {
       return res.status(403).json({
         status: 'error',
-        code: 'EMAIL_NOT_VERIFIED',
-        message: 'Please verify your email address before signing in. Check your inbox for the verification link.'
+        code: 'PENDING_APPROVAL',
+        message: 'Your account is awaiting admin approval. Please check back later.'
       });
     }
 
-    // 5. Issue a signed session token
     return res.status(200).json({
       status: 'success',
       message: 'User logged in successfully.',
@@ -304,9 +287,6 @@ export const loginUser = async (req: Request, res: Response, next: NextFunction)
 
 const googleClient = new OAuth2Client(env.GOOGLE_CLIENT_ID);
 
-/**
- * Handle secure Google OAuth verify-and-upsert sign-in logic
- */
 export const googleSignIn = async (req: Request, res: Response, next: NextFunction) => {
   const { idToken } = req.body;
 
@@ -318,7 +298,6 @@ export const googleSignIn = async (req: Request, res: Response, next: NextFuncti
   }
 
   try {
-    // 1. Verify the token signature against Google's keys
     const ticket = await googleClient.verifyIdToken({
       idToken,
       audience: env.GOOGLE_CLIENT_ID,
@@ -326,8 +305,6 @@ export const googleSignIn = async (req: Request, res: Response, next: NextFuncti
 
     const payload = ticket.getPayload();
 
-    // 2. Require a verified Google email — we treat Google as the proof of
-    // ownership, so an unverified one is not good enough.
     if (!payload || !payload.email || payload.email_verified !== true) {
       return res.status(401).json({
         status: 'error',
@@ -338,31 +315,34 @@ export const googleSignIn = async (req: Request, res: Response, next: NextFuncti
     const googleEmail = payload.email.toLowerCase().trim();
     const googleId = payload.sub;
 
-    // 3. Look up or create the user. Google accounts are verified on creation.
     let userQuery = await db.query('SELECT * FROM users WHERE email = $1;', [googleEmail]);
     let user;
 
     if (userQuery.rows.length === 0) {
       const insertQuery = await db.query(
-        `INSERT INTO users (email, google_id, email_verified)
-         VALUES ($1, $2, TRUE)
-         RETURNING id, email, created_at;`,
+        `INSERT INTO users (email, google_id) VALUES ($1, $2)
+         RETURNING id, email, is_approved, created_at;`,
         [googleEmail, googleId]
       );
       user = insertQuery.rows[0];
     } else {
       user = userQuery.rows[0];
-
-      // Link Google to a pre-existing email account, and mark it verified since
-      // Google has now proven control of the address.
-      if (!user.google_id || !user.email_verified) {
-        await db.query(
-          'UPDATE users SET google_id = COALESCE(google_id, $1), email_verified = TRUE WHERE id = $2;',
-          [googleId, user.id]
-        );
-        user.google_id = user.google_id || googleId;
-        user.email_verified = true;
+      if (!user.google_id) {
+        await db.query('UPDATE users SET google_id = $1 WHERE id = $2;', [googleId, user.id]);
+        user.google_id = googleId;
       }
+    }
+
+    // Google sign-ups still need admin approval.
+    if (!user.is_approved) {
+      if (canResendApprovalRequest(user.approval_requested_at)) {
+        await requestApproval(user.id, user.email);
+      }
+      return res.status(403).json({
+        status: 'error',
+        code: 'PENDING_APPROVAL',
+        message: 'Your account is awaiting admin approval. Please check back later.'
+      });
     }
 
     return res.status(200).json({

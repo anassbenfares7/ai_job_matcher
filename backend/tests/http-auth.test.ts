@@ -21,7 +21,7 @@ vi.mock("../src/config/database.js", () => ({
 }));
 
 vi.mock("../src/services/email.service.js", () => ({
-  sendVerificationEmail: vi.fn().mockResolvedValue(undefined),
+  sendApprovalRequestEmail: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("google-auth-library", () => ({
@@ -64,7 +64,8 @@ describe("HTTP auth routes", () => {
 
     mockDbQuery
       .mockResolvedValueOnce({ rows: [] } as any) // no existing account
-      .mockResolvedValueOnce({ rows: [] } as any); // insert
+      .mockResolvedValueOnce({ rows: [{ id: "u1" }] } as any) // insert
+      .mockResolvedValueOnce({ rows: [] } as any); // requestApproval UPDATE
 
     const res = await request(app)
       .post("/api/auth/register")
@@ -75,7 +76,7 @@ describe("HTTP auth routes", () => {
     expect(res.body.data).toBeUndefined();
   });
 
-  it("logs in an existing verified user through the HTTP layer", async () => {
+  it("logs in an existing approved user through the HTTP layer", async () => {
     const { default: app } = await import("../src/app.js");
     const bcrypt = await import("bcrypt");
 
@@ -86,7 +87,7 @@ describe("HTTP auth routes", () => {
           id: "user-123",
           email: "test@example.com",
           password_hash: passwordHash,
-          email_verified: true,
+          is_approved: true,
           created_at: "2025-01-01T00:00:00.000Z",
         },
       ],
@@ -143,41 +144,41 @@ describe("HTTP auth routes", () => {
     });
   });
 
-  it("validates Google token and creates new user", async () => {
+  it("creates a new Google user as pending approval (no token)", async () => {
     const { default: app } = await import("../src/app.js");
 
-    // Mock: No existing user
-    mockDbQuery.mockResolvedValueOnce({ rows: [] } as any);
-    // Mock: Insert new user
-    mockDbQuery.mockResolvedValueOnce({
-      rows: [
-        {
-          id: "user-google-123",
-          email: "newuser@gmail.com",
-          created_at: "2025-01-01T00:00:00.000Z",
-        },
-      ],
-    } as any);
+    mockDbQuery
+      .mockResolvedValueOnce({ rows: [] } as any) // no existing user
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "user-google-123",
+            email: "newuser@gmail.com",
+            is_approved: false,
+            created_at: "2025-01-01T00:00:00.000Z",
+          },
+        ],
+      } as any) // insert
+      .mockResolvedValueOnce({ rows: [] } as any); // requestApproval UPDATE
 
     const res = await request(app)
       .post("/api/auth/google")
       .send({ idToken: "valid-google-token" });
 
-    expect(res.status).toBe(200);
-    expect(res.body.status).toBe("success");
-    expect(res.body.data.token).toEqual(expect.any(String));
-    expect(res.body.data.user.email).toBe("newuser@gmail.com");
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("PENDING_APPROVAL");
   });
 
-  it("validates Google token and returns existing user", async () => {
+  it("returns a token for an existing approved Google user", async () => {
     const { default: app } = await import("../src/app.js");
 
-    // Mock: Existing user found
     mockDbQuery.mockResolvedValueOnce({
       rows: [
         {
           id: "user-existing-456",
           email: "test@gmail.com",
+          google_id: "google-id-123",
+          is_approved: true,
           created_at: "2024-12-01T00:00:00.000Z",
         },
       ],

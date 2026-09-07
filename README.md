@@ -19,7 +19,7 @@ The frontend uses a clean, Medium-inspired editorial interface focused on readab
 - 🎯 **ATS Feedback** — Provide feedback aimed at improving application relevance.
 - 💾 **Database Caching** — Store generated application materials to avoid unnecessary repeated AI requests.
 - 🔐 **JWT Authentication** — Protected dashboard and authenticated API requests.
-- ✉️ **Email Verification** — Email/password sign-ups must confirm their address before their first login.
+- ✅ **Admin Approval** — Every new signup is reviewed and approved by an admin before the account can sign in.
 - 📱 **Responsive UI** — Editorial-style interface designed for desktop and mobile layouts.
 - ⚡ **Fault-Tolerant Generation** — Retry generation requests when long-running AI operations cause network timeouts.
 
@@ -106,6 +106,11 @@ ai-job-matcher/
 ## 🔄 How It Works
 
 ```text
+                    ┌──────────────────┐
+                    │  Register  →  Admin approves
+                    └────────┬─────────┘
+                             │
+                             ▼
                     ┌──────────────────┐
                     │    User Login    │
                     └────────┬─────────┘
@@ -288,50 +293,19 @@ applications_and_matches
 
 ### Database Setup
 
-Make sure PostgreSQL has the `pgvector` extension installed.
+Make sure PostgreSQL has the `pgvector` extension installed, then run the schema:
 
-```sql
-CREATE EXTENSION IF NOT EXISTS vector;
-
-CREATE TABLE users (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  email VARCHAR(255) UNIQUE NOT NULL,
-  password VARCHAR(255) NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE resumes (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  raw_text TEXT NOT NULL,
-  structured_data JSONB NOT NULL,
-  embedding vector(768),
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE job_postings (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  title VARCHAR(255) NOT NULL,
-  company VARCHAR(255) NOT NULL,
-  location VARCHAR(255) NOT NULL,
-  description TEXT NOT NULL,
-  embedding vector(768),
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE applications_and_matches (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  job_posting_id UUID REFERENCES job_postings(id) ON DELETE CASCADE,
-  match_score NUMERIC(5,4),
-  generated_cover_letter TEXT,
-  generated_feedback TEXT,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-  CONSTRAINT unique_user_job
-    UNIQUE (user_id, job_posting_id)
-);
+```bash
+psql "$DATABASE_URL" -f backend/src/config/schema.sql
 ```
+
+[`backend/src/config/schema.sql`](./backend/src/config/schema.sql) is the single
+source of truth for the schema. It is safe to run repeatedly — every statement is
+guarded with `IF NOT EXISTS` / `IF EXISTS`, so it doubles as the migration you
+run after pulling changes (e.g. on Railway after a deploy).
+
+Tables: `users` (with `is_approved` + approval-token columns), `resumes`,
+`job_postings`, `applications_and_matches`.
 
 ---
 
@@ -384,30 +358,42 @@ GEMINI_API_KEY=your_google_ai_studio_api_key
 
 GOOGLE_CLIENT_ID=your_google_oauth_client_id
 
-# Email verification (Resend — https://resend.com).
-# Optional in development: if RESEND_API_KEY is unset the backend prints the
-# verification link to the console instead of sending an email.
-# Required in production.
+# Signup approval emails (Resend — https://resend.com).
+# When someone registers, a "please review" email is sent to ADMIN_EMAIL with a
+# link to approve or reject them. The new user can't sign in until approved.
+# Optional in development: without RESEND_API_KEY the backend prints the review
+# link to the console instead of emailing it.
 RESEND_API_KEY=your_resend_api_key
 EMAIL_FROM=AI Job Matcher <onboarding@resend.dev>
-# Base URL the verification link points at (your frontend). Defaults to FRONTEND_URL.
+ADMIN_EMAIL=you@example.com
+# Base URL the review link points at (your frontend). Defaults to FRONTEND_URL.
 APP_URL=http://localhost:3000
 
 # Free key from https://jooble.org/api/about — only needed to pull real job listings
 JOOBLE_API_KEY=your_jooble_api_key
 ```
 
-> **Email verification:** new email/password accounts start unverified and cannot
-> sign in until the link is clicked. Google sign-in accounts are verified
-> automatically. In dev without a Resend key, copy the link from the backend
-> console. To send real email you need a Resend account and, for production, a
-> verified sending domain.
+> **Signup approval:** new email/password and Google accounts start as *pending*
+> and cannot sign in until an admin approves them. Each signup sends a review
+> email to `ADMIN_EMAIL` with an approve/reject link (page at `/admin/review`).
+> In dev without a Resend key, copy the link from the backend console. Because
+> these emails only ever go to you, `onboarding@resend.dev` works fine — no
+> sending domain needed.
+>
+> Mail from the shared `onboarding@resend.dev` address often lands in **Spam** —
+> mark it "not spam" once and add the sender to your contacts. For reliable inbox
+> delivery, verify your own domain at resend.com/domains and set
+> `EMAIL_FROM=you@yourdomain.com`.
 
 ---
 
 ### 3. Initialize the Database
 
-Run the SQL schema above inside PostgreSQL.
+Run the schema (see **Database Setup** above):
+
+```bash
+psql "$DATABASE_URL" -f backend/src/config/schema.sql
+```
 
 Then load job data. Two options:
 
@@ -508,11 +494,12 @@ translateY(-100%)
 ### Authentication
 
 ```http
-POST /auth/register              # creates an unverified account, emails a link, returns no token
-POST /auth/login                 # 403 EMAIL_NOT_VERIFIED until the email is confirmed
-POST /auth/google
-POST /auth/verify-email          # { token } from the emailed link → verifies + returns a session token
-POST /auth/resend-verification   # { email } → always 200 (no account enumeration)
+POST /auth/register    # creates a pending account, emails the admin, returns no token
+POST /auth/login       # 403 PENDING_APPROVAL until an admin approves the account
+POST /auth/google      # same approval gate for new Google accounts
+GET  /auth/review      # ?token=... → the pending signup's info (for the admin page)
+POST /auth/approve     # { token } → approve the signup
+POST /auth/reject      # { token } → reject and delete the signup
 ```
 
 ### Resume

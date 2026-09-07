@@ -3,16 +3,20 @@ import {
   registerUser,
   loginUser,
   googleSignIn,
-  verifyEmail,
-  resendVerification,
+  reviewSignup,
+  approveSignup,
+  rejectSignup,
 } from '../controllers/auth.controller.js';
 
 const router = Router();
 
 router.post('/register', registerUser);
 router.post('/login', loginUser);
-router.post('/google', googleSignIn); // Route mounted for frontend incoming token validation
-router.post('/verify-email', verifyEmail);
-router.post('/resend-verification', resendVerification);
+router.post('/google', googleSignIn);
+
+// Admin signup review (the token from the review email is the authorization).
+router.get('/review', reviewSignup);
+router.post('/approve', approveSignup);
+router.post('/reject', rejectSignup);
 
 export default router;

@@ -24,7 +24,7 @@ const deliver = async (email: OutboundEmail): Promise<void> => {
     return;
   }
 
-  const { error } = await resend.emails.send({
+  const { data, error } = await resend.emails.send({
     from: env.EMAIL_FROM,
     to: email.to,
     subject: email.subject,
@@ -32,66 +32,69 @@ const deliver = async (email: OutboundEmail): Promise<void> => {
     text: email.text,
   });
 
-  if (error) {
-    // In dev, a delivery failure is usually just an unverified sending domain.
-    // Don't blow up with a stack trace — the console link above is enough.
-    if (env.NODE_ENV !== "production") {
-      console.warn(
-        `📭 [Email:dev] Resend did not deliver to ${email.to}: ${error.message}`,
-      );
-      return;
-    }
-    // Surface as a normal error; callers decide whether to fail the request.
+  if (!error) {
+    console.log(
+      `📧 [Email] Sent "${email.subject}" to ${email.to} from "${env.EMAIL_FROM}" (id: ${data?.id ?? "unknown"})`,
+    );
+    return;
+  }
+
+  // Delivery failed — almost always an unverified sending domain or a
+  // test-mode recipient restriction. Log it clearly either way.
+  console.error(
+    `📭 [Email] Resend rejected the send to ${email.to} from "${env.EMAIL_FROM}": ${error.message}`,
+  );
+
+  // In dev the console link is enough, so don't blow up. In prod, let the
+  // caller decide (registration still succeeds; it just logs the failure).
+  if (env.NODE_ENV === "production") {
     throw new Error(`Email delivery failed: ${error.message}`);
   }
 };
 
 /**
- * Send the "confirm your email" message. `token` is the raw (unhashed) token.
+ * Email the admin that a new user signed up and is waiting for approval.
+ * `token` is the raw (unhashed) approval token.
  */
-export const sendVerificationEmail = async (
-  to: string,
-  token: string,
+export const sendApprovalRequestEmail = async (
+  adminEmail: string,
+  opts: { userEmail: string; token: string; signedUpAt: Date },
 ): Promise<void> => {
-  const link = `${env.APP_URL}/auth/verify-email?token=${encodeURIComponent(token)}`;
+  const link = `${env.APP_URL}/admin/review?token=${encodeURIComponent(opts.token)}`;
+  const when = opts.signedUpAt.toISOString();
 
-  // Outside production, always surface the link in the server log so local
-  // testing works even when email delivery is misconfigured or unavailable.
+  // In dev, always surface the link in the server log so testing works even
+  // when email delivery isn't set up.
   if (env.NODE_ENV !== "production") {
-    console.log(`🔗 [Email:dev] Verification link for ${to}:\n${link}`);
+    console.log(
+      `🔗 [Email:dev] Signup review link for ${opts.userEmail}:\n${link}`,
+    );
   }
 
+  if (!adminEmail) {
+    console.error(
+      "⚠️  [Email] ADMIN_EMAIL is not set — cannot send the signup review email.",
+    );
+    return;
+  }
+
+  // Kept plain and link-light on purpose — heavy HTML from a shared sending
+  // domain gets spam-filtered.
   const text = [
-    "Welcome to AI Job Matcher.",
+    `New signup: ${opts.userEmail}`,
+    `Signed up: ${when}`,
     "",
-    "Confirm your email address to activate your account:",
-    link,
-    "",
-    "This link expires in 24 hours. If you didn't create an account, ignore this email.",
+    `Approve or reject: ${link}`,
   ].join("\n");
 
-  const html = `
-    <div style="font-family: -apple-system, Segoe UI, Roboto, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a;">
-      <h2 style="font-size: 18px; margin-bottom: 8px;">Confirm your email</h2>
-      <p style="font-size: 14px; line-height: 1.6; color: #444;">
-        Welcome to AI Job Matcher. Click below to activate your account.
-      </p>
-      <p style="margin: 24px 0;">
-        <a href="${link}"
-           style="background: #1a1a1a; color: #fff; text-decoration: none; font-size: 14px; font-weight: 600; padding: 10px 20px; border-radius: 9999px; display: inline-block;">
-          Verify email address
-        </a>
-      </p>
-      <p style="font-size: 12px; color: #888; line-height: 1.6;">
-        This link expires in 24 hours. If you didn't create an account, you can ignore this email.
-      </p>
-      <p style="font-size: 12px; color: #aaa; word-break: break-all;">${link}</p>
-    </div>
-  `.trim();
+  const html =
+    `<p>New signup: <strong>${opts.userEmail}</strong><br>` +
+    `Signed up: ${when}</p>` +
+    `<p>Approve or reject: <a href="${link}">${link}</a></p>`;
 
   await deliver({
-    to,
-    subject: "Confirm your email — AI Job Matcher",
+    to: adminEmail,
+    subject: `New signup awaiting approval: ${opts.userEmail}`,
     html,
     text,
   });

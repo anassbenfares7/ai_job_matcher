@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 
 vi.mock("../src/services/email.service.js", () => ({
-  sendVerificationEmail: vi.fn().mockResolvedValue(undefined),
+  sendApprovalRequestEmail: vi.fn().mockResolvedValue(undefined),
 }));
 
 const BASE_ENV = {
@@ -120,7 +120,8 @@ describe("auth controller flows", () => {
     const querySpy = vi.spyOn(db, "query");
     querySpy
       .mockResolvedValueOnce({ rows: [] } as any) // no existing account
-      .mockResolvedValueOnce({ rows: [] } as any); // insert
+      .mockResolvedValueOnce({ rows: [{ id: "u1" }] } as any) // insert
+      .mockResolvedValueOnce({ rows: [] } as any); // requestApproval UPDATE
 
     const req = {
       body: { email: "test@example.com", password: "secret123" },
@@ -133,7 +134,7 @@ describe("auth controller flows", () => {
     expect(res.status).toHaveBeenCalledWith(201);
     const payload = res.json.mock.calls[0][0];
     expect(payload.status).toBe("success");
-    // No token / user payload — the account must be verified first.
+    // No token / user payload — the account must be approved first.
     expect(payload.data).toBeUndefined();
     expect(next).not.toHaveBeenCalled();
   });
@@ -143,7 +144,7 @@ describe("auth controller flows", () => {
     const { registerUser } = await import("../src/controllers/auth.controller.js");
     vi.spyOn(db, "query")
       .mockResolvedValueOnce({
-        rows: [{ id: "u1", email_verified: true, email_verification_sent_at: null }],
+        rows: [{ id: "u1", is_approved: true, approval_requested_at: null }],
       } as any);
 
     const req = {
@@ -158,7 +159,7 @@ describe("auth controller flows", () => {
     expect(res.json.mock.calls[0][0].status).toBe("success");
   });
 
-  it("logs in an existing verified user with a valid password", async () => {
+  it("logs in an existing approved user with a valid password", async () => {
     const { db } = await import("../src/config/database.js");
     const { loginUser } = await import("../src/controllers/auth.controller.js");
     const passwordHash = await bcrypt.hash("secret123", 12);
@@ -168,7 +169,7 @@ describe("auth controller flows", () => {
           id: "user-123",
           email: "test@example.com",
           password_hash: passwordHash,
-          email_verified: true,
+          is_approved: true,
           created_at: "2025-01-01T00:00:00.000Z",
         },
       ],
@@ -225,7 +226,7 @@ describe("auth controller flows", () => {
     expect(next).not.toHaveBeenCalled();
   });
 
-  it("blocks login for a correct password on an unverified account", async () => {
+  it("blocks login for a correct password on a pending-approval account", async () => {
     const { db } = await import("../src/config/database.js");
     const { loginUser } = await import("../src/controllers/auth.controller.js");
     const passwordHash = await bcrypt.hash("secret123", 12);
@@ -235,7 +236,7 @@ describe("auth controller flows", () => {
           id: "user-123",
           email: "test@example.com",
           password_hash: passwordHash,
-          email_verified: false,
+          is_approved: false,
           created_at: "2025-01-01T00:00:00.000Z",
         },
       ],
@@ -250,97 +251,100 @@ describe("auth controller flows", () => {
     await loginUser(req, res, next);
 
     expect(res.status).toHaveBeenCalledWith(403);
-    expect(res.json.mock.calls[0][0].code).toBe("EMAIL_NOT_VERIFIED");
+    expect(res.json.mock.calls[0][0].code).toBe("PENDING_APPROVAL");
     expect(next).not.toHaveBeenCalled();
   });
 });
 
-describe("email verification flows", () => {
+describe("signup approval flows", () => {
   beforeEach(() => {
     vi.resetModules();
     vi.restoreAllMocks();
     Object.assign(process.env, BASE_ENV);
   });
 
-  it("verifies a fresh token and hands back a session token", async () => {
+  it("returns the pending signup's info for a valid review token", async () => {
     const { db } = await import("../src/config/database.js");
-    const { verifyEmail } = await import("../src/controllers/auth.controller.js");
-    vi.spyOn(db, "query")
-      .mockResolvedValueOnce({
-        rows: [
-          {
-            id: "user-123",
-            email: "test@example.com",
-            email_verified: false,
-            email_verification_sent_at: new Date().toISOString(),
-            created_at: "2025-01-01T00:00:00.000Z",
-          },
-        ],
-      } as any)
-      .mockResolvedValueOnce({ rows: [] } as any); // UPDATE
-
-    const req = { body: { token: "a".repeat(64) } } as any;
-    const res = makeMockRes();
-    const next = vi.fn();
-
-    await verifyEmail(req, res, next);
-
-    expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json.mock.calls[0][0].data.token).toBeTypeOf("string");
-  });
-
-  it("rejects an unknown verification token", async () => {
-    const { db } = await import("../src/config/database.js");
-    const { verifyEmail } = await import("../src/controllers/auth.controller.js");
-    vi.spyOn(db, "query").mockResolvedValueOnce({ rows: [] } as any);
-
-    const req = { body: { token: "does-not-exist" } } as any;
-    const res = makeMockRes();
-    const next = vi.fn();
-
-    await verifyEmail(req, res, next);
-
-    expect(res.status).toHaveBeenCalledWith(400);
-  });
-
-  it("rejects an expired verification token", async () => {
-    const { db } = await import("../src/config/database.js");
-    const { verifyEmail } = await import("../src/controllers/auth.controller.js");
-    const stale = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+    const { reviewSignup } = await import("../src/controllers/auth.controller.js");
     vi.spyOn(db, "query").mockResolvedValueOnce({
       rows: [
         {
-          id: "user-123",
-          email: "test@example.com",
-          email_verified: false,
-          email_verification_sent_at: stale,
-          created_at: "2025-01-01T00:00:00.000Z",
+          email: "new@example.com",
+          is_approved: false,
+          approval_requested_at: "2026-09-07T10:00:00.000Z",
+          created_at: "2026-09-07T10:00:00.000Z",
         },
       ],
+    } as any);
+
+    const req = { query: { token: "a".repeat(64) }, body: {} } as any;
+    const res = makeMockRes();
+    const next = vi.fn();
+
+    await reviewSignup(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json.mock.calls[0][0].data.email).toBe("new@example.com");
+  });
+
+  it("404s an unknown review token", async () => {
+    const { db } = await import("../src/config/database.js");
+    const { reviewSignup } = await import("../src/controllers/auth.controller.js");
+    vi.spyOn(db, "query").mockResolvedValueOnce({ rows: [] } as any);
+
+    const req = { query: { token: "nope" }, body: {} } as any;
+    const res = makeMockRes();
+    const next = vi.fn();
+
+    await reviewSignup(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(404);
+  });
+
+  it("approves a pending signup", async () => {
+    const { db } = await import("../src/config/database.js");
+    const { approveSignup } = await import("../src/controllers/auth.controller.js");
+    vi.spyOn(db, "query").mockResolvedValueOnce({
+      rows: [{ email: "new@example.com" }],
     } as any);
 
     const req = { body: { token: "a".repeat(64) } } as any;
     const res = makeMockRes();
     const next = vi.fn();
 
-    await verifyEmail(req, res, next);
+    await approveSignup(req, res, next);
 
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json.mock.calls[0][0].code).toBe("TOKEN_EXPIRED");
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json.mock.calls[0][0].message).toContain("new@example.com");
   });
 
-  it("resend-verification always responds the same way", async () => {
+  it("rejects (deletes) a pending signup", async () => {
     const { db } = await import("../src/config/database.js");
-    const { resendVerification } = await import("../src/controllers/auth.controller.js");
-    vi.spyOn(db, "query").mockResolvedValueOnce({ rows: [] } as any);
+    const { rejectSignup } = await import("../src/controllers/auth.controller.js");
+    vi.spyOn(db, "query").mockResolvedValueOnce({
+      rows: [{ email: "spam@example.com" }],
+    } as any);
 
-    const req = { body: { email: "nobody@example.com" } } as any;
+    const req = { body: { token: "a".repeat(64) } } as any;
     const res = makeMockRes();
     const next = vi.fn();
 
-    await resendVerification(req, res, next);
+    await rejectSignup(req, res, next);
 
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json.mock.calls[0][0].status).toBe("success");
+  });
+
+  it("400s approve on an already-used token", async () => {
+    const { db } = await import("../src/config/database.js");
+    const { approveSignup } = await import("../src/controllers/auth.controller.js");
+    vi.spyOn(db, "query").mockResolvedValueOnce({ rows: [] } as any);
+
+    const req = { body: { token: "a".repeat(64) } } as any;
+    const res = makeMockRes();
+    const next = vi.fn();
+
+    await approveSignup(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(400);
   });
 });
