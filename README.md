@@ -19,6 +19,7 @@ The frontend uses a clean, Medium-inspired editorial interface focused on readab
 - 🎯 **ATS Feedback** — Provide feedback aimed at improving application relevance.
 - 💾 **Database Caching** — Store generated application materials to avoid unnecessary repeated AI requests.
 - 🔐 **JWT Authentication** — Protected dashboard and authenticated API requests.
+- ✉️ **Email Verification** — Email/password sign-ups must confirm their address before their first login.
 - 📱 **Responsive UI** — Editorial-style interface designed for desktop and mobile layouts.
 - ⚡ **Fault-Tolerant Generation** — Retry generation requests when long-running AI operations cause network timeouts.
 
@@ -381,9 +382,26 @@ JWT_SECRET=your_jwt_secret
 
 GEMINI_API_KEY=your_google_ai_studio_api_key
 
+GOOGLE_CLIENT_ID=your_google_oauth_client_id
+
+# Email verification (Resend — https://resend.com).
+# Optional in development: if RESEND_API_KEY is unset the backend prints the
+# verification link to the console instead of sending an email.
+# Required in production.
+RESEND_API_KEY=your_resend_api_key
+EMAIL_FROM=AI Job Matcher <onboarding@resend.dev>
+# Base URL the verification link points at (your frontend). Defaults to FRONTEND_URL.
+APP_URL=http://localhost:3000
+
 # Free key from https://jooble.org/api/about — only needed to pull real job listings
 JOOBLE_API_KEY=your_jooble_api_key
 ```
+
+> **Email verification:** new email/password accounts start unverified and cannot
+> sign in until the link is clicked. Google sign-in accounts are verified
+> automatically. In dev without a Resend key, copy the link from the backend
+> console. To send real email you need a Resend account and, for production, a
+> verified sending domain.
 
 ---
 
@@ -490,8 +508,11 @@ translateY(-100%)
 ### Authentication
 
 ```http
-POST /auth/register
-POST /auth/login
+POST /auth/register              # creates an unverified account, emails a link, returns no token
+POST /auth/login                 # 403 EMAIL_NOT_VERIFIED until the email is confirmed
+POST /auth/google
+POST /auth/verify-email          # { token } from the emailed link → verifies + returns a session token
+POST /auth/resend-verification   # { email } → always 200 (no account enumeration)
 ```
 
 ### Resume

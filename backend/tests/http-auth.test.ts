@@ -20,6 +20,10 @@ vi.mock("../src/config/database.js", () => ({
   },
 }));
 
+vi.mock("../src/services/email.service.js", () => ({
+  sendVerificationEmail: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock("google-auth-library", () => ({
   OAuth2Client: class {
     async verifyIdToken(options: any) {
@@ -27,6 +31,7 @@ vi.mock("google-auth-library", () => ({
         getPayload: () => ({
           email: "test@gmail.com",
           sub: "google-id-123",
+          email_verified: true,
         }),
       };
     }
@@ -54,20 +59,12 @@ describe("HTTP auth routes", () => {
     });
   });
 
-  it("registers a user and returns a token over HTTP", async () => {
+  it("registers a user over HTTP without returning a token", async () => {
     const { default: app } = await import("../src/app.js");
 
     mockDbQuery
-      .mockResolvedValueOnce({ rows: [] } as any)
-      .mockResolvedValueOnce({
-        rows: [
-          {
-            id: "user-123",
-            email: "test@example.com",
-            created_at: "2025-01-01T00:00:00.000Z",
-          },
-        ],
-      } as any);
+      .mockResolvedValueOnce({ rows: [] } as any) // no existing account
+      .mockResolvedValueOnce({ rows: [] } as any); // insert
 
     const res = await request(app)
       .post("/api/auth/register")
@@ -75,11 +72,10 @@ describe("HTTP auth routes", () => {
 
     expect(res.status).toBe(201);
     expect(res.body.status).toBe("success");
-    expect(res.body.data.token).toEqual(expect.any(String));
-    expect(res.body.data.user.email).toBe("test@example.com");
+    expect(res.body.data).toBeUndefined();
   });
 
-  it("logs in an existing user through the HTTP layer", async () => {
+  it("logs in an existing verified user through the HTTP layer", async () => {
     const { default: app } = await import("../src/app.js");
     const bcrypt = await import("bcrypt");
 
@@ -90,6 +86,7 @@ describe("HTTP auth routes", () => {
           id: "user-123",
           email: "test@example.com",
           password_hash: passwordHash,
+          email_verified: true,
           created_at: "2025-01-01T00:00:00.000Z",
         },
       ],
