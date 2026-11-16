@@ -142,6 +142,7 @@ export default function DashboardPage() {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
+        timeout: 120000,
       });
 
       setSuccessMessage(
@@ -152,10 +153,16 @@ export default function DashboardPage() {
 
       await fetchSemanticMatches();
     } catch (err: any) {
-      setErrorMessage(
-        err.response?.data?.message ||
-          'Failed to analyze multi-modal asset data layers.'
-      );
+      if (err.code === 'ECONNABORTED' || err.code === 'ETIMEDOUT') {
+        setErrorMessage(
+          'Resume processing is taking longer than expected. Check your dashboard before retrying, as processing may still complete.'
+        );
+      } else {
+        setErrorMessage(
+          err.response?.data?.message ||
+            'Failed to analyze multi-modal asset data layers.'
+        );
+      }
     } finally {
       setUploading(false);
     }
