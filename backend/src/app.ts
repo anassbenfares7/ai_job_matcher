@@ -8,6 +8,14 @@ import materialRoutes from "./routes/material.routes.js";
 
 const app = express();
 
+app.get("/health", (req: Request, res: Response) => {
+  res.status(200).json({
+    status: "healthy",
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+  });
+});
+
 const isProduction = env.NODE_ENV === "production";
 
 // FRONTEND_URL must be set explicitly in production — silently falling back
@@ -36,13 +44,6 @@ app.use("/api/resumes", resumeRoutes);
 app.use("/api/matches", matchRoutes);
 app.use("/api/materials", materialRoutes);
 
-app.get("/health", (req: Request, res: Response) => {
-  res.status(200).json({
-    status: "healthy",
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-  });
-});
 
 app.use(
   (err: any, req: Request, res: Response, next: NextFunction) => {
