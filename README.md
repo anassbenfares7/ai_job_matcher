@@ -86,6 +86,20 @@ the contents of [`backend/src/config/schema.sql`](./backend/src/config/schema.sq
 
 ---
 
+### Admin dashboard
+
+The admin dashboard is available at `/admin`. In Vercel, set `ADMIN_EMAIL` to
+the exact email address of the approved admin account. The backend checks this
+allowlist on every admin API request; hiding the page in the frontend is not
+used as access control.
+
+Apply the current [`backend/src/config/schema.sql`](./backend/src/config/schema.sql)
+to Neon before deploying the backend so the account-suspension column exists.
+Admins can review parsed CV profiles, approve accounts, suspend or restore
+access, and permanently delete accounts. Original PDF files are not retained.
+Permanent deletion also removes the account's parsed CV profiles and saved
+matches.
+
 ```text
 ai-job-matcher/
 │

@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import axios from 'axios';
 import { useAuth } from '@/context/AuthContext';
 import { api } from '@/services/api';
 import {
@@ -34,8 +35,9 @@ export default function DashboardPage() {
   // Pipeline execution tracking states
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [matchesLoading, setMatchesLoading] = useState(false);
+  const [matchesLoading, setMatchesLoading] = useState(true);
   const [matches, setMatches] = useState<JobMatch[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [emptyMatchesMessage, setEmptyMatchesMessage] = useState(
     'Upload your CV to get personalized job recommendations.'
   );
@@ -51,6 +53,14 @@ export default function DashboardPage() {
   // Immersive Navigation Scroll Tracking State Hooks
   const [headerTransform, setHeaderTransform] = useState('translateY(0)');
   const lastScrollY = useRef(0);
+
+  const fetchSemanticMatches = useCallback(async () => {
+    const res = await api.get('/matches');
+    return {
+      matches: res.data.data || [],
+      message: res.data.message || 'No job recommendations are available right now.'
+    };
+  }, []);
 
   // 1. Smart Sticky Header Scroll Interceptor Logic
   useEffect(() => {
@@ -84,30 +94,29 @@ export default function DashboardPage() {
   // Protect the workspace route
   useEffect(() => {
     if (!authLoading && !user) {
-      router.push('/auth');
+      router.replace('/auth');
     } else if (user) {
-      fetchSemanticMatches();
+      fetchSemanticMatches()
+        .then(({ matches: loadedMatches, message }) => {
+          setMatches(loadedMatches);
+          setEmptyMatchesMessage(message);
+          setErrorMessage('');
+        })
+        .catch((err: unknown) => {
+          console.error('❌ Failed to load job recommendations:', err);
+          setErrorMessage("We couldn't load job recommendations. Please try again.");
+        })
+        .finally(() => setMatchesLoading(false));
+      api.get('/admin/access')
+        .then(() => setIsAdmin(true))
+        .catch((error: unknown) => {
+          setIsAdmin(false);
+          if (!axios.isAxiosError(error) || error.response?.status !== 403) {
+            console.error('❌ Failed to check admin access:', error);
+          }
+        });
     }
-  }, [user, authLoading]);
-
-  const fetchSemanticMatches = async () => {
-    setMatchesLoading(true);
-    setErrorMessage('');
-
-    try {
-      const res = await api.get('/matches');
-      setMatches(res.data.data || []);
-      setEmptyMatchesMessage(res.data.message || 'No job recommendations are available right now.');
-    } catch (err: any) {
-      console.error(
-        '❌ Failed to load job recommendations:',
-        err
-      );
-      setErrorMessage("We couldn't load job recommendations. Please try again.");
-    } finally {
-      setMatchesLoading(false);
-    }
-  };
+  }, [user, authLoading, router, fetchSemanticMatches]);
 
   const handleFileChange = (
     e: React.ChangeEvent<HTMLInputElement>
@@ -156,15 +165,31 @@ export default function DashboardPage() {
 
       setFile(null);
 
-      await fetchSemanticMatches();
-    } catch (err: any) {
-      if (err.code === 'ECONNABORTED' || err.code === 'ETIMEDOUT') {
+      setMatchesLoading(true);
+      try {
+        const { matches: loadedMatches, message } = await fetchSemanticMatches();
+        setMatches(loadedMatches);
+        setEmptyMatchesMessage(message);
+      } catch (err: unknown) {
+        console.error('❌ Failed to load job recommendations:', err);
+        setErrorMessage("We couldn't load job recommendations. Please try again.");
+      } finally {
+        setMatchesLoading(false);
+      }
+    } catch (err: unknown) {
+      if (
+        axios.isAxiosError(err) &&
+        (err.code === 'ECONNABORTED' || err.code === 'ETIMEDOUT')
+      ) {
         setErrorMessage(
           'Resume processing is taking longer than expected. Check your dashboard before retrying, as processing may still complete.'
         );
       } else {
+        const responseMessage = axios.isAxiosError<{ message?: string }>(err)
+          ? err.response?.data?.message
+          : undefined;
         setErrorMessage(
-          err.response?.data?.message ||
+          responseMessage ||
             "We couldn't analyze your CV. Please try again."
         );
       }
@@ -196,10 +221,10 @@ export default function DashboardPage() {
       }
 
       setGeneratingId(null);
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (
-        err.code === 'ECONNABORTED' ||
-        err.message?.includes('timeout')
+        axios.isAxiosError(err) &&
+        (err.code === 'ECONNABORTED' || err.message.includes('timeout'))
       ) {
         setTimeout(async () => {
           try {
@@ -217,7 +242,7 @@ export default function DashboardPage() {
                 retryRes.data.data.feedback || ''
               );
             }
-          } catch (retryErr) {
+          } catch {
             setErrorMessage(
               'Pipeline is processing context. Wait a moment and click re-generate.'
             );
@@ -226,8 +251,11 @@ export default function DashboardPage() {
           }
         }, 2500);
       } else {
+        const responseMessage = axios.isAxiosError<{ message?: string }>(err)
+          ? err.response?.data?.message
+          : undefined;
         setErrorMessage(
-          err.response?.data?.message ||
+          responseMessage ||
             'AI model is highly demanded. Please retry.'
         );
 
@@ -250,7 +278,7 @@ export default function DashboardPage() {
       {/* Global Navigation: Smart Scrolling Header */}
       <header
         style={{ transform: headerTransform }}
-        className="fixed top-0 left-0 right-0 h-16 border-b border-border-line bg-white/90 backdrop-blur-md transition-transform duration-300 ease-in-out z-50 flex items-center justify-between px-6"
+        className="fixed top-0 left-0 right-0 z-50 flex min-h-16 flex-wrap items-center justify-between gap-y-2 border-b border-border-line bg-white/90 px-4 py-2 backdrop-blur-md transition-transform duration-300 ease-in-out sm:h-16 sm:flex-nowrap sm:px-6 sm:py-0"
       >
         <div className="flex items-center gap-3 select-none">
           <Feather className="w-5 h-5 text-accent" />
@@ -260,8 +288,18 @@ export default function DashboardPage() {
           </span>
         </div>
 
-        <div className="flex items-center gap-6">
-          <span className="text-xs text-muted font-medium font-sans">
+        <div className="flex w-full items-center justify-end gap-3 sm:w-auto sm:gap-6">
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => router.push('/admin')}
+              className="text-xs font-semibold text-accent hover:text-main"
+            >
+              Admin
+            </button>
+          )}
+
+          <span className="hidden max-w-[35vw] truncate text-xs font-medium text-muted sm:inline sm:max-w-[24rem]">
             {user.email}
           </span>
 
@@ -276,7 +314,7 @@ export default function DashboardPage() {
       </header>
 
       {/* Main Structural Balanced Workplace Content Area */}
-      <main className="max-w-[1040px] mx-auto px-6 pt-28 pb-24 grid grid-cols-1 lg:grid-cols-3 gap-12">
+      <main className="mx-auto grid max-w-[1040px] grid-cols-1 gap-8 px-4 pb-16 pt-24 sm:gap-12 sm:px-6 sm:pb-24 sm:pt-28 lg:grid-cols-3">
 
         {/* Left Column: Recommendations */}
         <div className="lg:col-span-2 space-y-10 border-r border-transparent lg:border-border-line lg:pr-10">
@@ -470,9 +508,9 @@ export default function DashboardPage() {
       {/* Reader Component Modal Canvas */}
       {selectedJob &&
         (coverLetter || feedback || generatingId) && (
-          <div className="fixed inset-0 z-[100] bg-black/30 backdrop-blur-sm flex items-center justify-center p-6">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 p-2 backdrop-blur-sm sm:p-6">
 
-            <div className="relative bg-white w-full max-w-3xl max-h-[85vh] overflow-y-auto rounded-xl shadow-2xl border border-border-line">
+            <div className="relative max-h-[calc(100dvh-1rem)] w-full max-w-3xl overflow-y-auto rounded-xl border border-border-line bg-white shadow-2xl sm:max-h-[85vh]">
 
               {/* Control Panel Close Key */}
               <button
@@ -481,7 +519,7 @@ export default function DashboardPage() {
                   setCoverLetter('');
                   setFeedback('');
                 }}
-                className="absolute top-4 right-4 text-xs text-muted hover:text-main font-bold uppercase tracking-wider cursor-pointer border border-border-line px-3 py-1.5 rounded-full bg-white transition-colors z-10"
+                className="absolute right-3 top-3 z-10 cursor-pointer rounded-full border border-border-line bg-white px-3 py-2 text-xs font-bold uppercase tracking-wider text-muted transition-colors hover:text-main sm:right-4 sm:top-4"
               >
                 Close
               </button>
@@ -495,7 +533,7 @@ export default function DashboardPage() {
                   </p>
                 </div>
               ) : (
-                <div className="p-8 md:p-12">
+                <div className="p-5 pt-14 sm:p-8 sm:pt-16 md:p-12">
 
                   {/* 1. Meta / Author Header Block */}
                   <div className="mb-8 border-b border-border-line pb-6">
@@ -503,7 +541,7 @@ export default function DashboardPage() {
                       Application Materials
                     </span>
 
-                    <h2 className="font-serif text-3xl font-bold text-main mt-2 pr-24">
+                    <h2 className="mt-2 pr-3 font-serif text-2xl font-bold text-main sm:pr-24 sm:text-3xl">
                       Application Materials for {selectedJob.title}
                     </h2>
 

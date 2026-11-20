@@ -20,7 +20,7 @@ export default function EmailAuthForm({ isLogin, onSubmit, loading }: EmailAuthF
   };
 
   return (
-    <form onSubmit={handleFormSubmit} className="space-y-6">
+    <form onSubmit={handleFormSubmit} className="space-y-5 sm:space-y-6">
       <div>
         <label className="block text-[11px] font-bold text-main uppercase tracking-wider mb-2">
           Email Address
@@ -60,7 +60,7 @@ export default function EmailAuthForm({ isLogin, onSubmit, loading }: EmailAuthF
       <button
         type="submit"
         disabled={loading}
-        className="w-full mt-4 bg-main hover:bg-main/90 text-white font-medium text-sm py-2.5 px-4 rounded-full transition-all duration-150 flex justify-center items-center gap-2 group disabled:opacity-50 cursor-pointer select-none"
+        className="mt-4 flex min-h-11 w-full select-none items-center justify-center gap-2 rounded-full bg-main px-4 py-2.5 text-sm font-medium text-white transition-all duration-150 hover:bg-main/90 disabled:opacity-50"
       >
         {loading ? (
           <Loader2 className="w-4 h-4 animate-spin text-white" />

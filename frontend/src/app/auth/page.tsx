@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import axios from 'axios';
 import { Clock } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { api } from '@/services/api';
@@ -21,15 +22,19 @@ export default function AuthPage() {
   // Set after a successful registration — switches to the "pending approval" view.
   const [justRegistered, setJustRegistered] = useState(false);
 
-  const handleAuthError = (err: any, fallback: string) => {
-    if (err.response?.data?.code === 'PENDING_APPROVAL') {
+  const handleAuthError = (err: unknown, fallback: string) => {
+    const response = axios.isAxiosError<{ code?: string; message?: string }>(err)
+      ? err.response?.data
+      : undefined;
+
+    if (response?.code === 'PENDING_APPROVAL') {
       setErrorMessage(
-        err.response.data.message ||
+        response.message ||
           'Your account is awaiting admin approval. Please check back later.',
       );
       return;
     }
-    setErrorMessage(err.response?.data?.message || fallback);
+    setErrorMessage(response?.message || fallback);
   };
 
   const handleEmailAuthentication = async (email: string, password: string) => {
@@ -46,7 +51,7 @@ export default function AuthPage() {
         await api.post('/auth/register', { email, password });
         setJustRegistered(true);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('❌ Email Auth Gateway Exception:', err);
       handleAuthError(err, 'Authentication failed. Please verify credentials.');
     } finally {
@@ -63,7 +68,7 @@ export default function AuthPage() {
       const { token, user } = res.data.data;
       login(token, user);
       router.push('/dashboard');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('❌ Google Token Validation Exception:', err);
       handleAuthError(
         err,
@@ -77,11 +82,11 @@ export default function AuthPage() {
   // --- View: pending approval after registration ---
   if (justRegistered) {
     return (
-      <main className="min-h-screen bg-bg flex flex-col justify-center items-center px-6 text-main selection:bg-accent/10">
+      <main className="flex min-h-[100dvh] flex-col items-center justify-center bg-bg px-4 py-8 text-main selection:bg-accent/10 sm:px-6">
         <div className="w-full max-w-sm animate-fade-in">
           <AuthHeader />
 
-          <div className="mt-2 border border-border-line rounded-xl p-6 bg-white">
+          <div className="mt-2 rounded-xl border border-border-line bg-white p-5 sm:p-6">
             <div className="flex items-center gap-2 mb-3">
               <Clock className="w-5 h-5 text-accent" />
               <h2 className="font-serif text-lg font-bold text-main">
@@ -113,7 +118,7 @@ export default function AuthPage() {
 
   // --- View: normal auth form ---
   return (
-    <main className="min-h-screen bg-bg flex flex-col justify-center items-center px-6 text-main selection:bg-accent/10">
+    <main className="flex min-h-[100dvh] flex-col items-center justify-center bg-bg px-4 py-8 text-main selection:bg-accent/10 sm:px-6">
       <div className="w-full max-w-sm animate-fade-in">
 
         <AuthHeader />

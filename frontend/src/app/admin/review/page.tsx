@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
+import axios from 'axios';
 import { Loader2, CheckCircle, AlertCircle, XCircle, Mail, Clock } from 'lucide-react';
 import { api } from '@/services/api';
 import AuthHeader from '@/components/auth/AuthHeader';
@@ -24,25 +25,34 @@ export default function AdminReviewPage() {
     const token = new URLSearchParams(window.location.search).get('token');
     tokenRef.current = token;
 
-    if (!token) {
-      setPhase('error');
-      setMessage('This review link is missing its token.');
-      return;
-    }
+    let active = true;
+    const loadReview = async () => {
+      if (!token) throw new Error('This review link is missing its token.');
+      const res = await api.get<{ data: SignupInfo }>('/auth/review', { params: { token } });
+      return res.data.data;
+    };
 
-    (async () => {
-      try {
-        const res = await api.get('/auth/review', { params: { token } });
-        setInfo(res.data.data);
+    loadReview()
+      .then((signupInfo) => {
+        if (!active) return;
+        setInfo(signupInfo);
         setPhase('review');
-      } catch (err: any) {
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
         setPhase('error');
         setMessage(
-          err.response?.data?.message ||
-            'This review link is invalid or has already been used.',
+          !token
+            ? 'This review link is missing its token.'
+            : axios.isAxiosError<{ message?: string }>(error)
+              ? error.response?.data?.message || 'This review link is invalid or has already been used.'
+              : 'This review link is invalid or has already been used.',
         );
-      }
-    })();
+      });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   const act = async (path: '/auth/approve' | '/auth/reject') => {
@@ -52,10 +62,12 @@ export default function AdminReviewPage() {
       const res = await api.post(path, { token: tokenRef.current });
       setMessage(res.data.message);
       setPhase('done');
-    } catch (err: any) {
+    } catch (err: unknown) {
       setPhase('error');
       setMessage(
-        err.response?.data?.message || 'Something went wrong. Try the link again.',
+        axios.isAxiosError<{ message?: string }>(err)
+          ? err.response?.data?.message || 'Something went wrong. Try the link again.'
+          : 'Something went wrong. Try the link again.',
       );
     } finally {
       setActing(false);
@@ -63,11 +75,11 @@ export default function AdminReviewPage() {
   };
 
   return (
-    <main className="min-h-screen bg-bg flex flex-col justify-center items-center px-6 text-main selection:bg-accent/10">
+    <main className="flex min-h-[100dvh] flex-col items-center justify-center bg-bg px-4 py-8 text-main selection:bg-accent/10 sm:px-6">
       <div className="w-full max-w-sm animate-fade-in">
         <AuthHeader />
 
-        <div className="mt-2 border border-border-line rounded-xl p-6 bg-white">
+        <div className="mt-2 rounded-xl border border-border-line bg-white p-5 sm:p-6">
           {phase === 'loading' && (
             <div className="flex flex-col items-center gap-3 py-4">
               <Loader2 className="w-6 h-6 text-accent animate-spin" />
@@ -98,7 +110,7 @@ export default function AdminReviewPage() {
                   This account is already approved.
                 </p>
               ) : (
-                <div className="flex gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row">
                   <button
                     type="button"
                     disabled={acting}
