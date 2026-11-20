@@ -34,6 +34,20 @@ describe("HTTP admin routes", () => {
     return jwt.sign({ id, email }, BASE_ENV.JWT_SECRET, { expiresIn: "1h" });
   };
 
+  it("allows CORS preflight for account suspension updates", async () => {
+    const { default: app } = await import("../src/app.js");
+
+    const res = await request(app)
+      .options(`/api/admin/users/${USER_ID}/suspension`)
+      .set("Origin", "http://localhost:3000")
+      .set("Access-Control-Request-Method", "PATCH")
+      .set("Access-Control-Request-Headers", "authorization,content-type");
+
+    expect(res.status).toBe(204);
+    expect(res.headers["access-control-allow-methods"]).toContain("PATCH");
+    expect(res.headers["access-control-allow-origin"]).toBe("http://localhost:3000");
+  });
+
   it("denies admin endpoints to authenticated non-admin users", async () => {
     const { default: app } = await import("../src/app.js");
     const token = await tokenFor(USER_ID, "user@example.com");
