@@ -53,8 +53,11 @@ describe("HTTP match routes", () => {
       { expiresIn: "1h" },
     );
 
-    // Mock: No resume found
-    mockDbQuery.mockResolvedValueOnce({ rows: [] } as any);
+    mockDbQuery
+      .mockResolvedValueOnce({
+        rows: [{ email: "test@example.com", is_approved: true, is_suspended: false }],
+      } as any) // Active account check
+      .mockResolvedValueOnce({ rows: [] } as any); // No resume found
 
     const res = await request(app)
       .get("/api/matches")
@@ -81,32 +84,33 @@ describe("HTTP match routes", () => {
       { expiresIn: "1h" },
     );
 
-    // Mock: Resume exists
-    mockDbQuery.mockResolvedValueOnce({
-      rows: [{ embedding: Array.from({ length: 768 }, () => 0.1) }],
-    } as any);
-
-    // Mock: Job matches
-    mockDbQuery.mockResolvedValueOnce({
-      rows: [
-        {
-          id: "job-1",
-          title: "Senior TypeScript Engineer",
-          company: "TechCorp",
-          location: "Remote",
-          description: "Build scalable web apps",
-          match_score: 0.95,
-        },
-        {
-          id: "job-2",
-          title: "Full Stack Developer",
-          company: "StartupXYZ",
-          location: "Casablanca",
-          description: "Work on our AI platform",
-          match_score: 0.87,
-        },
-      ],
-    } as any);
+    mockDbQuery
+      .mockResolvedValueOnce({
+        rows: [{ email: "test@example.com", is_approved: true, is_suspended: false }],
+      } as any) // Active account check
+      .mockResolvedValueOnce({
+        rows: [{ embedding: Array.from({ length: 768 }, () => 0.1) }],
+      } as any) // Resume exists
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "job-1",
+            title: "Senior TypeScript Engineer",
+            company: "TechCorp",
+            location: "Remote",
+            description: "Build scalable web apps",
+            match_score: 0.95,
+          },
+          {
+            id: "job-2",
+            title: "Full Stack Developer",
+            company: "StartupXYZ",
+            location: "Casablanca",
+            description: "Work on our AI platform",
+            match_score: 0.87,
+          },
+        ],
+      } as any);
 
     const res = await request(app)
       .get("/api/matches")

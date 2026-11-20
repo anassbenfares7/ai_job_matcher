@@ -59,6 +59,10 @@ describe("HTTP material routes", () => {
       { expiresIn: "1h" },
     );
 
+    mockDbQuery.mockResolvedValueOnce({
+      rows: [{ email: "test@example.com", is_approved: true, is_suspended: false }],
+    } as any);
+
     const res = await request(app)
       .post("/api/materials/generate")
       .set("Authorization", `Bearer ${token}`)
@@ -84,16 +88,19 @@ describe("HTTP material routes", () => {
       { expiresIn: "1h" },
     );
 
-    // Mock: Cached materials found
-    mockDbQuery.mockResolvedValueOnce({
-      rows: [
-        {
-          match_score: 0.92,
-          generated_cover_letter: "Dear Hiring Manager...",
-          generated_feedback: "Strong background match",
-        },
-      ],
-    } as any);
+    mockDbQuery
+      .mockResolvedValueOnce({
+        rows: [{ email: "test@example.com", is_approved: true, is_suspended: false }],
+      } as any)
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            match_score: 0.92,
+            generated_cover_letter: "Dear Hiring Manager...",
+            generated_feedback: "Strong background match",
+          },
+        ],
+      } as any);
 
     const res = await request(app)
       .post("/api/materials/generate")
@@ -127,8 +134,11 @@ describe("HTTP material routes", () => {
       { expiresIn: "1h" },
     );
 
-    // Mock: No cached materials
-    mockDbQuery.mockResolvedValueOnce({ rows: [] } as any);
+    mockDbQuery
+      .mockResolvedValueOnce({
+        rows: [{ email: "test@example.com", is_approved: true, is_suspended: false }],
+      } as any)
+      .mockResolvedValueOnce({ rows: [] } as any); // No cached materials
 
     // Mock: Job data found
     mockDbQuery.mockResolvedValueOnce({
@@ -189,8 +199,11 @@ describe("HTTP material routes", () => {
       { expiresIn: "1h" },
     );
 
-    // Mock: No cached materials
-    mockDbQuery.mockResolvedValueOnce({ rows: [] } as any);
+    mockDbQuery
+      .mockResolvedValueOnce({
+        rows: [{ email: "test@example.com", is_approved: true, is_suspended: false }],
+      } as any)
+      .mockResolvedValueOnce({ rows: [] } as any); // No cached materials
 
     // Mock: Job not found
     mockDbQuery.mockResolvedValueOnce({ rows: [] } as any);
@@ -220,8 +233,11 @@ describe("HTTP material routes", () => {
       { expiresIn: "1h" },
     );
 
-    // Mock: No cached materials
-    mockDbQuery.mockResolvedValueOnce({ rows: [] } as any);
+    mockDbQuery
+      .mockResolvedValueOnce({
+        rows: [{ email: "test@example.com", is_approved: true, is_suspended: false }],
+      } as any)
+      .mockResolvedValueOnce({ rows: [] } as any); // No cached materials
 
     // Mock: Job found
     mockDbQuery.mockResolvedValueOnce({

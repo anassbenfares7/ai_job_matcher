@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
+import { db } from '../config/database.js';
 
 // Extend the Express Request type declaration to cleanly include the authenticated user context
 export interface AuthenticatedRequest extends Request {
@@ -10,7 +11,7 @@ export interface AuthenticatedRequest extends Request {
   };
 }
 
-export const requireAuth = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+export const requireAuth = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   // 1. Extract the Authorization header
   const authHeader = req.headers.authorization;
 
@@ -24,18 +25,20 @@ export const requireAuth = (req: AuthenticatedRequest, res: Response, next: Next
   // 2. Extract the raw token from the "Bearer <token>" string format
   const token = authHeader.split(' ')[1];
 
+  let userId: string;
   try {
-    // 3. Verify the token signature against our application secret
-    const decoded = jwt.verify(token, env.JWT_SECRET) as { id: string; email: string };
-    
-    // 4. Attach the user identity payload directly onto the Request context
-    req.user = {
-      id: decoded.id,
-      email: decoded.email
-    };
-
-    // 5. Pass control safely to the next controller in line
-    next();
+    const payload = jwt.verify(token, env.JWT_SECRET);
+    if (
+      typeof payload === 'string' ||
+      typeof payload.id !== 'string' ||
+      typeof payload.email !== 'string'
+    ) {
+      return res.status(401).json({
+        status: 'error',
+        message: 'Access denied. The provided authentication token is invalid or expired.'
+      });
+    }
+    userId = payload.id;
   } catch (error) {
     console.error('❌ JWT Verification Error:', error);
     return res.status(401).json({
@@ -43,4 +46,52 @@ export const requireAuth = (req: AuthenticatedRequest, res: Response, next: Next
       message: 'Access denied. The provided authentication token is invalid or expired.'
     });
   }
+
+  try {
+    const accountResult = await db.query(
+      'SELECT email, is_approved, is_suspended FROM users WHERE id = $1;',
+      [userId]
+    );
+    const account = accountResult.rows[0];
+
+    if (!account || !account.is_approved || account.is_suspended) {
+      return res.status(403).json({
+        status: 'error',
+        message: 'This account is no longer active. Please contact the administrator.'
+      });
+    }
+
+    req.user = {
+      id: userId,
+      email: account.email
+    };
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const requireAdmin = (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  const adminEmail = env.ADMIN_EMAIL.trim().toLowerCase();
+  const userEmail = req.user?.email.trim().toLowerCase();
+
+  if (!adminEmail) {
+    return res.status(503).json({
+      status: 'error',
+      message: 'Admin access is not configured on the server.'
+    });
+  }
+
+  if (!userEmail || userEmail !== adminEmail) {
+    return res.status(403).json({
+      status: 'error',
+      message: 'You do not have permission to access this page.'
+    });
+  }
+
+  next();
 };

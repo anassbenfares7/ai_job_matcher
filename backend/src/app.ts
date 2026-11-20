@@ -5,6 +5,7 @@ import authRoutes from "./routes/auth.routes.js"; // Import our new routing laye
 import resumeRoutes from "./routes/resume.routes.js";
 import matchRoutes from "./routes/match.routes.js";
 import materialRoutes from "./routes/material.routes.js";
+import adminRoutes from "./routes/admin.routes.js";
 
 const app = express();
 
@@ -43,6 +44,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/resumes", resumeRoutes);
 app.use("/api/matches", matchRoutes);
 app.use("/api/materials", materialRoutes);
+app.use("/api/admin", adminRoutes);
 
 
 app.use(

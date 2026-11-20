@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash VARCHAR(255),
     google_id VARCHAR(255) UNIQUE,
     is_approved BOOLEAN NOT NULL DEFAULT FALSE,      -- an admin must approve the account before the user can log in
+    is_suspended BOOLEAN NOT NULL DEFAULT FALSE,
     approval_token_hash CHAR(64),                    -- SHA-256 hex of the token in the admin's review email; raw token is never stored
     approval_requested_at TIMESTAMPTZ,               -- when the signup happened / last admin email was sent (drives the resend cooldown)
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
@@ -28,6 +29,7 @@ END $$;
 
 -- For brand-new databases built straight from this file, or any missing a column.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS is_approved BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_suspended BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS approval_token_hash CHAR(64);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS approval_requested_at TIMESTAMPTZ;
 

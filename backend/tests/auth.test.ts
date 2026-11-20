@@ -40,7 +40,7 @@ describe("auth core flows", () => {
     const res = makeMockRes();
     const next = vi.fn();
 
-    requireAuth(req, res, next);
+    await requireAuth(req, res, next);
 
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalledWith({
@@ -59,7 +59,7 @@ describe("auth core flows", () => {
     const res = makeMockRes();
     const next = vi.fn();
 
-    requireAuth(req, res, next);
+    await requireAuth(req, res, next);
 
     expect(res.status).toHaveBeenCalledWith(401);
     expect(next).not.toHaveBeenCalled();
@@ -67,7 +67,11 @@ describe("auth core flows", () => {
 
   it("accepts a valid bearer token and attaches the user to the request", async () => {
     const secret = process.env.JWT_SECRET as string;
+    const { db } = await import("../src/config/database.js");
     const { requireAuth } = await import("../src/middleware/auth.js");
+    vi.spyOn(db, "query").mockResolvedValueOnce({
+      rows: [{ email: "test@example.com", is_approved: true, is_suspended: false }],
+    } as any);
     const token = jwt.sign(
       { id: "user-123", email: "test@example.com" },
       secret,
@@ -79,7 +83,7 @@ describe("auth core flows", () => {
     const res = makeMockRes();
     const next = vi.fn();
 
-    requireAuth(req, res, next);
+    await requireAuth(req, res, next);
 
     expect(req.user).toEqual({
       id: "user-123",
@@ -87,6 +91,29 @@ describe("auth core flows", () => {
     });
     expect(next).toHaveBeenCalledTimes(1);
     expect(res.status).not.toHaveBeenCalled();
+  });
+
+  it("blocks an existing session for a suspended account", async () => {
+    const { db } = await import("../src/config/database.js");
+    const { requireAuth } = await import("../src/middleware/auth.js");
+    vi.spyOn(db, "query").mockResolvedValueOnce({
+      rows: [{ email: "test@example.com", is_approved: true, is_suspended: true }],
+    } as any);
+    const token = jwt.sign(
+      { id: "user-123", email: "test@example.com" },
+      process.env.JWT_SECRET as string,
+      { expiresIn: "1h" },
+    );
+    const req = {
+      headers: { authorization: `Bearer ${token}` },
+    } as any;
+    const res = makeMockRes();
+    const next = vi.fn();
+
+    await requireAuth(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(next).not.toHaveBeenCalled();
   });
 });
 

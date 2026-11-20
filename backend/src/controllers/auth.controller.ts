@@ -264,6 +264,14 @@ export const loginUser = async (req: Request, res: Response, next: NextFunction)
       });
     }
 
+    if (user.is_suspended) {
+      return res.status(403).json({
+        status: 'error',
+        code: 'ACCOUNT_SUSPENDED',
+        message: 'This account has been suspended. Please contact the administrator.'
+      });
+    }
+
     if (!user.is_approved) {
       return res.status(403).json({
         status: 'error',
@@ -334,6 +342,14 @@ export const googleSignIn = async (req: Request, res: Response, next: NextFuncti
     }
 
     // Google sign-ups still need admin approval.
+    if (user.is_suspended) {
+      return res.status(403).json({
+        status: 'error',
+        code: 'ACCOUNT_SUSPENDED',
+        message: 'This account has been suspended. Please contact the administrator.'
+      });
+    }
+
     if (!user.is_approved) {
       if (canResendApprovalRequest(user.approval_requested_at)) {
         await requestApproval(user.id, user.email);

@@ -63,6 +63,10 @@ describe("HTTP resume routes", () => {
       { expiresIn: "1h" },
     );
 
+    mockDbQuery.mockResolvedValueOnce({
+      rows: [{ email: "test@example.com", is_approved: true, is_suspended: false }],
+    } as any);
+
     const res = await request(app)
       .post("/api/resumes/upload")
       .set("Authorization", `Bearer ${token}`)
@@ -109,11 +113,15 @@ describe("HTTP resume routes", () => {
       Array.from({ length: 768 }, () => 0.1),
     );
 
-    mockDbQuery.mockResolvedValueOnce({
-      rows: [
-        { id: "resume-1", created_at: "2025-01-01T00:00:00.000Z" },
-      ],
-    } as any);
+    mockDbQuery
+      .mockResolvedValueOnce({
+        rows: [{ email: "test@example.com", is_approved: true, is_suspended: false }],
+      } as any)
+      .mockResolvedValueOnce({
+        rows: [
+          { id: "resume-1", created_at: "2025-01-01T00:00:00.000Z" },
+        ],
+      } as any);
 
     const res = await request(app)
       .post("/api/resumes/upload")
