@@ -63,8 +63,7 @@ describe("HTTP match routes", () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
       status: "success",
-      message:
-        "No active profile found. Please upload a CV first to activate semantic job matching.",
+      message: "Upload your CV to get personalized job recommendations.",
       data: [],
     });
   });
@@ -122,6 +121,7 @@ describe("HTTP match routes", () => {
       company: "TechCorp",
       location: "Remote",
       description: "Build scalable web apps",
+      applyUrl: null,
       matchPercentage: 95,
     });
     expect(res.body.data[1].matchPercentage).toBe(87);

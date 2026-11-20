@@ -46,19 +46,43 @@ git clone <repo> /app && cd /app && \
 docker-compose -f docker-compose.prod.yml up -d
 ```
 
-### Keeping jobs fresh (scheduled ingest)
+### Load jobs for production (Cloudflare + Vercel + Neon)
 
-The job list only updates when the ingest script runs. To refresh it automatically
-on Railway, add a **separate service** from the same repo:
+Uploading a CV saves the candidate profile. Job recommendations come from
+listings already stored in Neon; uploading a CV does not fetch listings.
 
-- **Build:** `cd backend && npm ci && npm run build`
-- **Start / Cron command:** `cd backend && npm run ingest:prod`
-- **Cron schedule:** e.g. `0 6 * * *` (daily at 06:00 UTC)
-- **Env vars:** same `DATABASE_URL`, `GEMINI_API_KEY`, `JOOBLE_API_KEY` as the backend
+1. In Neon, open **SQL Editor** and check whether listings are present:
 
-Railway runs the command on schedule, it exits when done, and the web service is
-untouched. `ingest:prod` runs the compiled script directly (no `tsx`), so it works
-with production-only dependencies.
+```sql
+SELECT COUNT(*) AS job_listings, COUNT(embedding) AS searchable_listings
+FROM job_postings;
+```
+
+2. If either count is `0`, create or update `backend/.env` locally. Set
+   `DATABASE_URL` to the **production Neon database/branch used by Vercel**.
+   Keep the required `GEMINI_API_KEY`, `GOOGLE_CLIENT_ID`, and `JWT_SECRET`
+   values, and add `JOOBLE_API_KEY`. Do not commit this file.
+
+3. From the repository folder, run this in the VS Code terminal:
+
+```powershell
+cd backend
+npm ci
+npm run build
+npm run ingest:prod
+```
+
+Wait for the command to finish, then run the Neon count query again. Refresh the
+website when `searchable_listings` is greater than `0`; you do not need to upload
+the CV again.
+
+This repository does not currently run job imports automatically on Vercel, so
+repeat step 3 when you want to refresh listings. Do not use `npm run seed` in
+production; it deletes existing job listings.
+
+If the count query says `job_postings` does not exist, initialize the database
+first: in Neon SQL Editor run `CREATE EXTENSION IF NOT EXISTS vector;`, then run
+the contents of [`backend/src/config/schema.sql`](./backend/src/config/schema.sql).
 
 ---
 

@@ -35,8 +35,35 @@ describe("semantic match flows", () => {
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({
       status: "success",
-      message:
-        "No active profile found. Please upload a CV first to activate semantic job matching.",
+      message: "Upload your CV to get personalized job recommendations.",
+      data: [],
+    });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it("explains when there are no jobs to recommend", async () => {
+    const { db } = await import("../src/config/database.js");
+    const { getSemanticMatches } =
+      await import("../src/controllers/match.controller.js");
+
+    vi.spyOn(db, "query")
+      .mockResolvedValueOnce({
+        rows: [{ embedding: "[0.1,0.2,0.3]" }],
+      } as any)
+      .mockResolvedValueOnce({ rows: [] } as any);
+
+    const req = {
+      user: { id: "11111111-1111-4111-8111-111111111111" },
+    } as any;
+    const res = makeMockRes();
+    const next = vi.fn();
+
+    await getSemanticMatches(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({
+      status: "success",
+      message: "No job recommendations are available right now. Please check back soon.",
       data: [],
     });
     expect(next).not.toHaveBeenCalled();
@@ -70,7 +97,8 @@ describe("semantic match flows", () => {
             match_score: "0.65",
           },
         ],
-      } as any);
+      } as any)
+      .mockResolvedValue({ rows: [] } as any);
 
     const req = {
       user: { id: "11111111-1111-4111-8111-111111111111" },

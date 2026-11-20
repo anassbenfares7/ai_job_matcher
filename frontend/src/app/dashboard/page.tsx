@@ -36,6 +36,9 @@ export default function DashboardPage() {
   const [uploading, setUploading] = useState(false);
   const [matchesLoading, setMatchesLoading] = useState(false);
   const [matches, setMatches] = useState<JobMatch[]>([]);
+  const [emptyMatchesMessage, setEmptyMatchesMessage] = useState(
+    'Upload your CV to get personalized job recommendations.'
+  );
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
@@ -94,11 +97,13 @@ export default function DashboardPage() {
     try {
       const res = await api.get('/matches');
       setMatches(res.data.data || []);
+      setEmptyMatchesMessage(res.data.message || 'No job recommendations are available right now.');
     } catch (err: any) {
       console.error(
-        '❌ Failed to pull semantic matching listings:',
+        '❌ Failed to load job recommendations:',
         err
       );
+      setErrorMessage("We couldn't load job recommendations. Please try again.");
     } finally {
       setMatchesLoading(false);
     }
@@ -146,7 +151,7 @@ export default function DashboardPage() {
       });
 
       setSuccessMessage(
-        'CV processed and vector space records compiled successfully.'
+        'Your CV was analyzed successfully.'
       );
 
       setFile(null);
@@ -160,7 +165,7 @@ export default function DashboardPage() {
       } else {
         setErrorMessage(
           err.response?.data?.message ||
-            'Failed to analyze multi-modal asset data layers.'
+            "We couldn't analyze your CV. Please try again."
         );
       }
     } finally {
@@ -282,8 +287,7 @@ export default function DashboardPage() {
             </h2>
 
             <p className="text-xs text-muted font-sans mt-1">
-              Calculated natively via 768-dimensional Cosine Similarity
-              algorithms [SQL Query].
+              Jobs selected to fit your skills and experience.
             </p>
           </div>
 
@@ -292,7 +296,7 @@ export default function DashboardPage() {
               <Loader2 className="w-5 h-5 text-accent animate-spin" />
 
               <span className="text-xs text-muted font-mono uppercase tracking-widest">
-                Scanning Vector Clusters...
+                Finding jobs that fit your CV...
               </span>
             </div>
           ) : matches.length === 0 ? (
@@ -300,12 +304,11 @@ export default function DashboardPage() {
               <Briefcase className="w-6 h-6 text-muted mx-auto mb-2" />
 
               <p className="text-sm font-medium text-main">
-                No active profile embeddings mapped.
+                No job recommendations yet.
               </p>
 
               <p className="text-xs text-muted mt-1 max-w-xs mx-auto leading-relaxed">
-                Upload your digital CV onto the right terminal to
-                calibrate matching coordinates.
+                {emptyMatchesMessage}
               </p>
             </div>
           ) : (
@@ -346,7 +349,7 @@ export default function DashboardPage() {
                         <Sparkles className="w-3.5 h-3.5" />
 
                         <span>
-                          Tailor Application View
+                          Prepare Application
                         </span>
                       </button>
 
@@ -398,7 +401,7 @@ export default function DashboardPage() {
               <Upload className="w-4 h-4 text-accent" />
 
               <h3 className="font-serif font-bold text-lg text-main">
-                Portfolio Asset Input
+                Upload Your CV
               </h3>
             </div>
 
@@ -436,7 +439,7 @@ export default function DashboardPage() {
                 <span className="block text-xs font-medium text-muted truncate">
                   {file
                     ? file.name
-                    : 'Drop selectable resume PDF'}
+                    : 'Choose a PDF CV'}
                 </span>
               </div>
 
@@ -454,7 +457,7 @@ export default function DashboardPage() {
                   ) : (
                     <>
                       <Sparkles className="w-4 h-4" />
-                      Process Vector Embedding
+                      Find Matching Jobs
                     </>
                   )}
                 </button>
@@ -480,7 +483,7 @@ export default function DashboardPage() {
                 }}
                 className="absolute top-4 right-4 text-xs text-muted hover:text-main font-bold uppercase tracking-wider cursor-pointer border border-border-line px-3 py-1.5 rounded-full bg-white transition-colors z-10"
               >
-                Close Reader
+                Close
               </button>
 
               {generatingId ? (
@@ -488,7 +491,7 @@ export default function DashboardPage() {
                   <Loader2 className="w-7 h-7 text-accent animate-spin" />
 
                   <p className="text-sm text-muted font-serif">
-                    Drafting Review Assets via Gemini...
+                    Preparing your application materials...
                   </p>
                 </div>
               ) : (
@@ -497,16 +500,15 @@ export default function DashboardPage() {
                   {/* 1. Meta / Author Header Block */}
                   <div className="mb-8 border-b border-border-line pb-6">
                     <span className="text-[10px] uppercase tracking-widest text-accent font-bold">
-                      Application Blueprint
+                      Application Materials
                     </span>
 
                     <h2 className="font-serif text-3xl font-bold text-main mt-2 pr-24">
-                      Application Blueprint for {selectedJob.title}
+                      Application Materials for {selectedJob.title}
                     </h2>
 
                     <p className="text-sm text-muted mt-3 max-w-2xl leading-relaxed">
-                      Customized cover letter framing variables matched
-                      directly to {selectedJob.company}'s operational criteria.
+                      A cover letter and CV tips tailored to this role at {selectedJob.company}.
                     </p>
                   </div>
 
@@ -514,7 +516,7 @@ export default function DashboardPage() {
                   {coverLetter && (
                     <section className="mb-8">
                       <h3 className="font-serif text-xl font-bold text-main mb-4">
-                        Section I: Bespoke Cover Letter
+                        Cover Letter
                       </h3>
 
                       <div className="border border-border-line rounded-lg bg-slate-50 p-6 text-sm text-main leading-7 whitespace-pre-wrap">
@@ -527,7 +529,7 @@ export default function DashboardPage() {
                   {feedback && (
                     <section>
                       <h3 className="font-serif text-xl font-bold text-main mb-4">
-                        Section II: ATS Optimization Feedback
+                        CV Improvement Tips
                       </h3>
 
                       <blockquote className="border-l-4 border-accent bg-slate-50 p-6 text-sm text-muted leading-7 whitespace-pre-wrap">

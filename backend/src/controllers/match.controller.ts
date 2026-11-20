@@ -27,7 +27,7 @@ export const getSemanticMatches = async (req: AuthenticatedRequest, res: Respons
     if (resumeQuery.rows.length === 0 || !resumeQuery.rows[0].embedding) {
       return res.status(200).json({
         status: 'success',
-        message: 'No active profile found. Please upload a CV first to activate semantic job matching.',
+        message: 'Upload your CV to get personalized job recommendations.',
         data: []
       });
     }
@@ -48,6 +48,7 @@ export const getSemanticMatches = async (req: AuthenticatedRequest, res: Respons
         apply_url,
         (1 - (embedding <=> $1::vector)) AS match_score
        FROM job_postings
+       WHERE embedding IS NOT NULL
        ORDER BY embedding <=> $1::vector
        LIMIT 10;`,
       [userCVVector]
@@ -82,7 +83,9 @@ export const getSemanticMatches = async (req: AuthenticatedRequest, res: Respons
 
     return res.status(200).json({
       status: 'success',
-      message: 'Semantic job match recommendations retrieved successfully.',
+      message: rankedMatches.length > 0
+        ? 'Job recommendations are ready.'
+        : 'No job recommendations are available right now. Please check back soon.',
       data: rankedMatches
     });
 
